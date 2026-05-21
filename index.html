@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grand-Theft-Auto-Tio1.jpg-Stories</title>
+    <style>
+        body {
+            background-color: #0d021a;
+            color: #00ffcc;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 10px;
+            user-select: none;
+        }
+        h1 {
+            color: #ff0055;
+            text-shadow: 3px 3px #000, -2px -2px #00f0ff;
+            font-size: 36px;
+            margin: 5px 0;
+            letter-spacing: 1px;
+        }
+        .subtitle {
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            margin-bottom: 15px;
+        }
+        #game-frame {
+            position: relative;
+            display: inline-block;
+            border: 5px solid #ff0055;
+            background-color: #000;
+            box-shadow: 0 0 30px #ff0055;
+        }
+        .hud {
+            display: flex;
+            justify-content: space-between;
+            background: linear-gradient(90deg, #ff0055, #00f0ff);
+            color: #fff;
+            padding: 8px 15px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 16px;
+            text-shadow: 1px 1px #000;
+        }
+        canvas {
+            display: block;
+            background: #110322;
+        }
+        .overlay {
+            position: absolute;
+            top: 38px;
+            left: 0;
+            width: 800px;
+            height: 450px;
+            background: rgba(10, 3, 20, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .overlay h2 {
+            color: #00f0ff;
+            font-size: 32px;
+            margin-bottom: 10px;
+            font-family: 'Impact', sans-serif;
+            text-shadow: 2px 2px #ff0055;
+        }
+        .overlay p {
+            font-size: 15px;
+            line-height: 1.5;
+            max-width: 650px;
+            color: #eee;
+            text-align: center;
+        }
+        button {
+            background: #ff0055;
+            color: #fff;
+            border: 3px solid #00f0ff;
+            padding: 12px 30px;
+            font-size: 20px;
+            font-family: 'Impact', sans-serif;
+            cursor: pointer;
+            margin-top: 20px;
+            text-shadow: 1px 1px #000;
+        }
+        button:hover {
+            background: #00f0ff;
+            color: #000;
+            box-shadow: 0 0 15px #ff0055;
+        }
+        .hidden { display: none !important; }
+        .controls-tip {
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Grand-Theft-Auto-Tio1.jpg-Stories</h1>
+    <div class="subtitle">Copia de seguridad autorizada para la posteridad de Tuvalu Ulterior</div>
+
+    <div id="game-frame">
+        <div class="hud">
+            <div>ESTADO: <span id="hud-mission">Esperando inicio...</span></div>
+            <div>MIRADA PERVERSA: <span id="hud-laser">LISTA (ESPACIO)</span></div>
+            <div>PUNTOS: <span id="hud-score">0</span></div>
+        </div>
+
+        <canvas id="gtaCanvas" width="800" height="450"></canvas>
+
+        <div id="screen-overlay" class="overlay">
+            <h2 id="overlay-title">AÑO 7016: EL COMIENZO</h2>
+            <p id="overlay-text">Prepárate para presenciar los caóticos eventos documentados por los mejores sabios de la Inciclopedia antes de aterrizar forzosamente en las playas de Tuvalu Ulterior.</p>
+            <button id="overlay-btn" onclick="startIntroCinematic()">VER CINEMÁTICA E INICIAR</button>
+        </div>
+    </div>
+
+    <div class="controls-tip">
+        [W, A, S, D / Flechas] Moverse | [Espacio] Activar la devastadora Mirada Perversa
+    </div>
+
+<script>
+    const canvas = document.getElementById("gtaCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // UI DOM Elements
+    const overlay = document.getElementById("screen-overlay");
+    const oTitle = document.getElementById("overlay-title");
+    const oText = document.getElementById("overlay-text");
+    const oBtn = document.getElementById("overlay-btn");
+    const hudMission = document.getElementById("hud-mission");
+    const hudLaser = document.getElementById("hud-laser");
+    const hudScore = document.getElementById("hud-score");
+
+    // Game Core Variables
+    let gameState = 'menu'; // 'menu', 'intro', 'playing', 'gameover'
+    let gameInterval;
+    let score = 0;
+    let keys = {};
+    let introFrame = 0;
+
+    // Entities
+    let player, entities, goals, lasers;
+
+    // Key Listeners
+    window.addEventListener("keydown", e => { keys[e.key] = true; if(e.key === " ") e.preventDefault(); });
+    window.addEventListener("keyup", e => keys[e.key] = false);
+
+    // Misiones del juego basadas en el artículo
+    const missions = [
+        { title: "Misión I: Without a Face", obj: "Vandaliza y recoge 5 servidores", target: "servidor", enemy: "policía", targetCount: 5 },
+        { title: "Misión III: Lovely", obj: "Atrapa a Bob Esponja para el tratamiento facial", target: "bob", enemy: "bache", targetCount: 1 },
+        { title: "Misión VI: No ***** on Vicodin", obj: "Consigue 6 cargamentos de Vicodín en el puerto", target: "vicodin", enemy: "innombrable", targetCount: 6 }
+    ];
+    let currentMissionIdx = 0;
+
+    function startIntroCinematic() {
+        overlay.classList.add("hidden");
+        gameState = 'intro';
+        introFrame = 0;
+        hudMission.innerText = "🎞️ Cinemática Inicial";
+        hudLaser.innerText = "BLOQUEADA";
+        
+        clearInterval(gameInterval);
+        gameInterval = setInterval(gameLoop, 1000 / 60);
+    }
+
+    function initGameplay() {
+        gameState = 'playing';
+        currentMissionIdx = 0;
+        score = 0;
+        hudScore.innerText = score;
+        setupStage(currentMissionIdx);
+    }
+
+    function setupStage(idx) {
+        const m = missions[idx];
+        hudMission.innerText = m.title + " - " + m.obj;
+        hudLaser.innerText = "READY (ESPACIO)";
+
+        player = {
+            x: 80, y: 200,
+            width: 45, height: 45,
+            speed: 5,
+            collected: 0,
+            cooldown: 0
+        };
+
+        entities = [];
+        goals = [];
+        lasers = [];
+
+        // Generar primer objetivo
+        spawnGoal(m.target);
+        // Generar patrullas hostiles iniciales
+        for(let i=0; i<4; i++) spawnEnemy(m.enemy);
+    }
+
+    function spawnGoal(type) {
+        goals.push({
+            x: 200 + Math.random() * 500,
+            y: 60 + Math.random() * 320,
+            width: 25, height: 25,
+            type: type
+        });
+    }
+
+    function spawnEnemy(type) {
+        entities.push({
+            x: canvas.width + Math.random() * 300,
+            y: 60 + Math.random() * 320,
+            width: 32, height: 35,
+            speed: 2.5 + Math.random() * 3.5,
+            type: type
+        });
+    }
+
+    function gameLoop() {
+        if (gameState === 'intro') {
+            updateAndDrawIntro();
+        } else if (gameState === 'playing') {
+            updateAndDrawGameplay();
+        }
+    }
+
+    // --- ESCENA DE INTRODUCCIÓN ANIMADA ---
+    function updateAndDrawIntro() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Fondo del espacio profundo de la Inciclopedia
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#fff";
+        for(let i=0; i<30; i++) {
+            ctx.fillRect((i*43)%canvas.width, (i*29)%canvas.height, 2, 2);
+        }
+
+        // Dibujar la Wikiestrella de la Muerte acercándose
+        let starX = 140;
+        let starY = 160;
+        ctx.fillStyle = "#444";
+        ctx.beginPath();
+        ctx.arc(starX, starY, 65, 0, Math.PI*2);
+        ctx.fill();
+        ctx.fillStyle = "#222";
+        ctx.beginPath();
+        ctx.arc(starX + 20, starY - 20, 22, 0, Math.PI*2);
+        ctx.fill();
+        // Logotipo icónico de Wikipedia en la superarma
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 24px Arial";
+        ctx.fillText("W", starX - 10, starY + 10);
+
+        // Dibujar las dos estructuras (Las Torres Gemelas de la Wikipedia de la cinemática)
+        let t1Y = 160;
+        let t2Y = 160;
+        if (introFrame > 140) {
+            t1Y += (introFrame - 140) * 3; // Colapso dinámico hacia abajo
+            t2Y += (introFrame - 140) * 3.5;
+        }
+
+        ctx.fillStyle = "#778899";
+        if (t1Y < canvas.height) ctx.fillRect(520, t1Y, 45, 300);
+        ctx.fillStyle = "#607182";
+        if (t2Y < canvas.height) ctx.fillRect(600, t2Y, 45, 300);
+
+        // ¡Disparar el Superláser de la Wikiestrella!
+        if (introFrame > 70 && introFrame < 150) {
+            ctx.strokeStyle = "#00ff33";
+            ctx.lineWidth = 10;
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = "#00ff33";
+            ctx.beginPath();
+            ctx.moveTo(starX + 20, starY - 20);
+            ctx.lineTo(540, 250);
+            ctx.lineTo(620, 250);
+            ctx.stroke();
+            ctx.shadowBlur = 0; // Reset
+        }
+
+        // Explosiones catastróficas masivas
+        if (introFrame > 100 && introFrame < 180) {
+            ctx.fillStyle = "#ff3300";
+            ctx.beginPath();
+            ctx.arc(540 + Math.sin(introFrame)*15, 230 + Math.cos(introFrame)*10, 45 + Math.sin(introFrame)*15, 0, Math.PI*2);
+            ctx.arc(620 + Math.cos(introFrame)*10, 240 + Math.sin(introFrame)*15, 40 + Math.cos(introFrame)*15, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = "#ffcc00";
+            ctx.beginPath();
+            ctx.arc(540, 230, 25, 0, Math.PI*2);
+            ctx.arc(620, 240, 20, 0, Math.PI*2);
+            ctx.fill();
+        }
+
+        // Subtítulos de la cinemática adaptados
+        ctx.fillStyle = "#fff";
+        ctx.font = "16px 'Courier New'";
+        ctx.textAlign = "center";
+        if (introFrame < 80) {
+            ctx.fillText("[SISTEMA]: La Wikiestrella de la Muerte entra en órbita...", canvas.width/2, 410);
+        } else if (introFrame >= 80 && introFrame < 150) {
+            ctx.fillStyle = "#ff0055";
+            ctx.fillText("¡¡LA WIKIESTRELLA DE LA MUERTE DESTRUYE LAS TORRES DE LA WIKIPEDIA!!", canvas.width/2, 410);
+        } else {
+            ctx.fillStyle = "#00ffcc";
+            ctx.fillText("Naufragio completado. Desembarcando en Tuvalu Ulterior...", canvas.width/2, 410);
+        }
+
+        introFrame++;
+        if (introFrame > 260) {
+            initGameplay();
+        }
+    }
+
+    // --- MECÁNICA PRINCIPAL DEL JUEGO ---
+    function updateAndDrawGameplay() {
+        const m = missions[currentMissionIdx];
+
+        // 1. Movimiento del jugador
+        if (keys["ArrowUp"] || keys["w"] || keys["W"]) player.y -= player.speed;
+        if (keys["ArrowDown"] || keys["s"] || keys["S"]) player.y += player.speed;
+        if (keys["ArrowLeft"] || keys["a"] || keys["A"]) player.x -= player.speed;
+        if (keys["ArrowRight"] || keys["d"] || keys["D"]) player.x += player.speed;
+
+        // Límites de pantalla de Tuvalu Ulterior
+        if (player.x < 0) player.x = 0;
+        if (player.x > canvas.width - player.width) player.x = canvas.width - player.width;
+        if (player.y < 50) player.y = 50;
+        if (player.y > canvas.height - player.height) player.y = canvas.height - player.height;
+
+        // 2. DISPARAR: La Mirada Perversa (Espacio)
+        if (keys[" "] && player.cooldown <= 0) {
+            lasers.push({
+                x: player.x + player.width - 5,
+                y: player.y + 8,
+                width: 35,
+                height: 6,
+                speed: 12
+            });
+            player.cooldown = 15; // Tiempo de recarga de la mirada
+        }
+        if (player.cooldown > 0) player.cooldown--;
+
+        // Actualizar Láseres de Mirada Perversa
+        lasers.forEach((laser, lIdx) => {
+            laser.x += laser.speed;
+            if (laser.x > canvas.width) lasers.splice(lIdx, 1);
+        });
+
+        // 3. Actualizar Enemigos y colisiones con Mirada Perversa
+        entities.forEach((enemy, eIdx) => {
+            enemy.x -= enemy.speed;
+            if (enemy.x < -enemy.width) {
+                entities.splice(eIdx, 1);
+                spawnEnemy(m.enemy);
+            }
+
+            // Impacto de la Mirada Perversa contra los enemigos
+            lasers.forEach((laser, lIdx) => {
+                if (checkCollision(laser, enemy)) {
+                    lasers.splice(lIdx, 1);
+                    entities.splice(eIdx, 1);
+                    score += 50;
+                    hudScore.innerText = score;
+                    spawnEnemy(m.enemy);
+                }
+            });
+
+            // Colisión directa perjudicial con el jugador
+            if (checkCollision(player, enemy)) {
+                score = Math.max(0, score - 5);
+                hudScore.innerText = score;
+                enemy.x = canvas.width + Math.random() * 200; // Lo repele
+            }
+        });
+
+        // 4. Recoger objetivos de la misión
+        goals.forEach((goal, gIdx) => {
+            if (checkCollision(player, goal)) {
+                goals.splice(gIdx, 1);
+                player.collected++;
+                score += 150;
+                hudScore.innerText = score;
+
+                if (player.collected >= m.targetCount) {
+                    currentMissionIdx++;
+                    if (currentMissionIdx < missions.length) {
+                        clearInterval(gameInterval);
+                        oTitle.innerText = "¡MISIÓN SUPERADA!";
+                        oText.innerText = `Has completado con éxito los objetivos de la fase anterior. Prepárate para el siguiente encargo criminal de Guy2.jpg.`;
+                        oBtn.innerText = `INICIAR SIGUIENTE MISIÓN`;
+                        oBtn.onclick = () => { overlay.classList.add("hidden"); setupStage(currentMissionIdx); gameInterval = setInterval(gameLoop, 1000/60); };
+                        overlay.classList.remove("hidden");
+                    } else {
+                        // Victoria absoluta
+                        clearInterval(gameInterval);
+                        gameState = 'gameover';
+                        oTitle.innerText = "¡NIVEL TRASCENDENTAL!";
+                        oText.innerText = "Has completado todas las misiones fundamentales, dominando los barrios de Ukelele y Bikini. ¡Te has convertido oficialmente en el Padre de la Patria de Tuvalu Ulterior! Chan Chan CHAN!";
+                        oBtn.innerText = "RECOMPENSA DE LA INCICLOPEDIA (REINICIAR)";
+                        oBtn.onclick = () => { startIntroCinematic(); };
+                        overlay.classList.remove("hidden");
+                    }
+                } else {
+                    spawnGoal(m.target);
+                }
+            }
+        });
+
+        // --- RENDERIZADO DEL ENTORNO ---
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Dibujar el asfalto retro de Ukelele
+        ctx.fillStyle = "#16092b";
+        ctx.fillRect(0, 50, canvas.width, canvas.height - 50);
+        ctx.strokeStyle = "#ff0055";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([30, 20]);
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height / 2 + 25);
+        ctx.lineTo(canvas.width, canvas.height / 2 + 25);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Dibujar los objetivos recolectables
+        goals.forEach(goal => {
+            ctx.font = "24px Arial";
+            let sym = "💾";
+            if (goal.type === "bob") sym = "🧽";
+            if (goal.type === "vicodin") sym = "💊";
+            ctx.fillText(sym, goal.x, goal.y + 20);
+        });
+
+        // Dibujar los proyectiles de la Mirada Perversa
+        lasers.forEach(laser => {
+            ctx.fillStyle = "#ff00ff";
+            ctx.shadowBlur = 12;
+            ctx.shadowColor = "#ff00ff";
+            ctx.fillRect(laser.x, laser.y, laser.width, laser.height);
+            ctx.shadowBlur = 0;
+        });
+
+        // Dibujar fuerzas opuestas
+        entities.forEach(enemy => {
+            ctx.fillStyle = enemy.type === "policía" ? "#0033ff" : "#ff2222";
+            ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+            ctx.fillStyle = "#fff";
+            ctx.font = "14px Arial";
+            ctx.fillText(enemy.type === "policía" ? "🚓" : "🕵️", enemy.x + 4, enemy.y + 22);
+        });
+
+        // DIBUJAR AL MITICO TIO1.JPG (Fiel a la portada: Camisa cian, gafas negras)
+        // Camisa de Vice City (Cian)
+        ctx.fillStyle = "#00f0ff";
+        ctx.fillRect(player.x, player.y + 12, player.width, 18);
+        // Vaqueros azules
+        ctx.fillStyle = "#3b5998";
+        ctx.fillRect(player.x + 4, player.y + 30, player.width - 8, 15);
+
+        // Rostro y peinado
+        ctx.fillStyle = "#fcd0a1"; 
+        ctx.fillRect(player.x + 10, player.y, 25, 15);
+        ctx.fillStyle = "#5c4033"; // Cabello castaño icónico
+        ctx.fillRect(player.x + 8, player.y, 29, 5); 
+        ctx.fillRect(player.x + 8, player.y, 5, 12);
+        ctx.fillRect(player.x + 32, player.y, 5, 12);
+
+        // Gafas oscuras impenetrables de la portada
+        ctx.fillStyle = "#000";
+        ctx.fillRect(player.x + 13, player.y + 5, 8, 5);
+        ctx.fillRect(player.x + 24, player.y + 5, 8, 5);
+
+        // El bigote abrasivo autolimpiante
+        ctx.fillStyle = "#26140a";
+        ctx.fillRect(player.x + 16, player.y + 11, 14, 3);
+    }
+
+    function checkCollision(r1, r2) {
+        return r1.x < r2.x + r2.width &&
+               r1.x + r1.width > r2.x &&
+               r1.y < r2.y + r2.height &&
+               r1.y + r1.height > r2.y;
+    }
+</script>
+</body>
+</html>
