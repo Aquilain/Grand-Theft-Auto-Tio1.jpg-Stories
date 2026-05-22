@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grand-Theft-Auto-Tio1.jpg-Stories: Real Interiors</title>
+    <style>
+        body {
+            background-color: #06010a;
+            color: #00ffff;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 10px;
+            user-select: none;
+        }
+        h1 {
+            color: #ff0055;
+            text-shadow: 3px 3px #000, -2px -2px #00ffff;
+            font-size: 32px;
+            margin: 4px 0;
+        }
+        .subtitle {
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        #game-frame {
+            position: relative;
+            display: inline-block;
+            border: 5px solid #ff0055;
+            background-color: #000;
+            box-shadow: 0 0 35px #ff0055;
+        }
+        .hud {
+            display: flex;
+            justify-content: space-between;
+            background: linear-gradient(90deg, #ff0055, #00ffff);
+            color: #fff;
+            padding: 6px 15px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 14px;
+            text-shadow: 1px 1px #000;
+        }
+        canvas {
+            display: block;
+            background: #0a0312;
+        }
+        .overlay {
+            position: absolute;
+            top: 32px;
+            left: 0;
+            width: 800px;
+            height: 450px;
+            background: rgba(6, 2, 12, 0.96);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+        .overlay h2 {
+            color: #00ffff;
+            font-size: 26px;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px #ff0055;
+        }
+        button {
+            background: #ff0055;
+            color: #fff;
+            border: 3px solid #00ffff;
+            padding: 12px 30px;
+            font-size: 20px;
+            font-family: 'Impact', sans-serif;
+            cursor: pointer;
+            text-shadow: 1px 1px #000;
+        }
+        button:hover {
+            background: #00ffff;
+            color: #000;
+            box-shadow: 0 0 15px #ff0055;
+        }
+        .hidden { display: none !important; }
+        .controls-tip {
+            margin-top: 6px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Grand-Theft-Auto-Tio1.jpg-Stories</h1>
+    <div class="subtitle">Interiores de Casas Funcionales — Cruza la Puerta para Entrar al Recinto</div>
+
+    <div id="game-frame">
+        <div class="hud">
+            <div>ZONA: <span id="hud-zone">Tuvalu Exterior</span></div>
+            <div>VIDA: <span id="hud-health" style="color: #00ff00;">100%</span></div>
+            <div>PROGRESO: <span id="hud-progress">0/0</span></div>
+            <div>PUNTOS: <span id="hud-score">0</span></div>
+        </div>
+
+        <canvas id="gtaCanvas" width="800" height="450"></canvas>
+
+        <div id="screen-overlay" class="overlay">
+            <h2 id="overlay-title">SISTEMA DE SIMULACIÓN URBANA v4.0</h2>
+            <p style="max-width:600px; text-align:justify; font-size:12px; color:#ccc;">
+                Se ha corregido el ancho de paso de las puertas. Camina hacia el interior de las viviendas usando los huecos de entrada abiertos en los muros perimetrales.
+            </p>
+            <button id="overlay-btn" onclick="startIntroCinematic()">VER EXPLOSIÓN DE TORRES E INICIAR</button>
+        </div>
+    </div>
+
+    <div class="controls-tip">
+        Controles: [W, A, S, D] para caminar/conducir | [Espacio] Mirada Perversa Automática al enemigo más cercano
+    </div>
+
+<script>
+    const canvas = document.getElementById("gtaCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const overlay = document.getElementById("screen-overlay");
+    const oTitle = document.getElementById("overlay-title");
+    const hudZone = document.getElementById("hud-zone");
+    const hudProgress = document.getElementById("hud-progress");
+    const hudScore = document.getElementById("hud-score");
+    const hudHealth = document.getElementById("hud-health");
+
+    const WORLD_WIDTH = 2600;
+    const WORLD_HEIGHT = 1600;
+    let camera = { x: 0, y: 0 };
+
+    let gameState = 'menu';
+    let gameInterval;
+    let score = 0;
+    let keys = {};
+    let introFrame = 0;
+    
+    let alertBannerText = "";
+    let alertBannerTimer = 0;
+
+    let player, entities, goals, lasers, worldHouses, solidWalls;
+    let currentMissionIdx = 0;
+
+    const landmarks = {
+        casaMision1Id: 0, // Primera casa generada en la lista
+        guaridaSuroeste: { x: 300, y: 1350 },
+        puertoCarga: { x: 2300, y: 1300 }
+    };
+
+    window.addEventListener("keydown", e => { keys[e.key] = true; if(e.key === " ") e.preventDefault(); });
+    window.addEventListener("keyup", e => keys[e.key] = false);
+
+    // PLANIFICACIÓN URBANA: EDIFICACIONES TRIDIMENSIONALES CON ACCESO TOTAL
+    function buildTuvaluUrbanism() {
+        worldHouses = [];
+        solidWalls = [];
+
+        // Coordenadas fijas para las propiedades de la isla
+        const housePositions = [
+            { x: 2000, y: 220, isTarget: true },  // Casa de la Misión I (Noreste)
+            { x: 600, y: 350, isTarget: false },  // Mansión secundaria
+            { x: 1300, y: 400, isTarget: false },
+            { x: 1700, y: 800, isTarget: false },
+            { x: 750, y: 1050, isTarget: false },
+            { x: 1400, y: 1250, isTarget: false }
+        ];
+
+        housePositions.forEach((pos, idx) => {
+            let w = 170; // Casas más grandes y espaciosas
+            let h = 130;
+            let doorWidth = 60; // ¡PUERTA AMPLIADA! Ahora el personaje pasa holgadamente
+            
+            let house = {
+                id: idx,
+                x: pos.x,
+                y: pos.y,
+                w: w,
+                h: h,
+                isTarget: pos.isTarget,
+                // La entrada se sitúa en la parte inferior del plano
+                doorX: pos.x + (w / 2) - (doorWidth / 2),
+                doorY: pos.y + h - 12,
+                doorW: doorWidth,
+                doorH: 16
+            };
+            worldHouses.push(house);
+
+            // COLISIÓN EFECTIVA: Bloqueo de paredes exteriores respetando el umbral de entrada
+            // Pared Norte
+            solidWalls.push({ x: pos.x, y: pos.y, w: w, h: 12 });
+            // Pared Oeste
+            solidWalls.push({ x: pos.x, y: pos.y, w: 12, h: h });
+            // Pared Este
+            solidWalls.push({ x: pos.x + w - 12, y: pos.y, w: 12, h: h });
+            
+            // Pared Sur (Dividida en ala izquierda y ala derecha dejando la puerta en medio)
+            let sideWallLength = (w / 2) - (doorWidth / 2);
+            solidWalls.push({ x: pos.x, y: pos.y + h - 12, w: sideWallLength, h: 12 });
+            solidWalls.push({ x: pos.x + (w / 2) + (doorWidth / 2), y: pos.y + h - 12, w: sideWallLength, h: 12 });
+        });
+    }
+
+    // CADENA DE ENCARGOS SIN INTERRUPCIONES (EN LA ESQUINA DEL HUD)
+    const campaignMissions = [
+        {
+            title: "Misión I (P1). Without a face:Allanamiento",
+            objective: "Cruza el umbral de la puerta trasera y entra en la casa del Noreste [🏠]",
+            targetType: "entrar_casa", enemyType: "bache", targetGoal: 1, isCar: false
+        },
+        {
+            title: "Misión I (P2). Without a face:Limpieza Informática",
+            objective: "Destruye los 4 servidores enemigos [💾] instalados dentro de los cuartos",
+            targetType: "servidor", enemyType: "defensa", targetGoal: 4, isCar: false
+        },
+        {
+            title: "Misión I (P3). Without a face:Huida en bólido",
+            objective: "¡Conduce el coche mafioso hasta la base segura del Suroeste! [🏢]",
+            targetType: "guarida", enemyType: "poli", targetGoal: 1, isCar: true
+        },
+        {
+            title: "Misión II. Sense of humour",
+            objective: "Localiza y convence a 5 humoristas callejeros [🎭] para la red",
+            targetType: "humor", enemyType: "aburrido", targetGoal: 5, isCar: false
+        },
+        {
+            title: "Misión III. Lovely",
+            objective: "Persigue a Bob Esponja [🧽] por la autopista y confisca su esponja",
+            targetType: "bob", enemyType: "obstaculo", targetGoal: 1, isCar: true
+        },
+        {
+            title: "Misión IV. No canon on vicodin",
+            objective: "Saquea los cargamentos de medicina [💊] del muelle comercial",
+            targetType: "vicodin", enemyType: "innombrable", targetGoal: 5, isCar: false
+        }
+    ];
+
+    function startIntroCinematic() {
+        overlay.classList.add("hidden");
+        gameState = 'intro';
+        introFrame = 0;
+        buildTuvaluUrbanism();
+        clearInterval(gameInterval);
+        gameInterval = setInterval(gameLoop, 1000 / 60);
+    }
+
+    function initializeMissionData(idx) {
+        currentMissionIdx = idx;
+        const m = campaignMissions[idx];
+        
+        hudProgress.innerText = `0/${m.targetGoal}`;
+
+        if (idx === 0) {
+            // Ajuste de escala: El jugador es más compacto (26x26) para maniobrar dentro de habitaciones
+            player = { x: 1400, y: 750, width: 26, height: 26, speed: 5.2, collected: 0, cooldown: 0, health: 100, isCar: false, insideHouseId: -1 };
+        } else {
+            player.collected = 0;
+        }
+
+        // Metamorfosis a coche si es requerido por el guión de la esquina
+        player.isCar = m.isCar;
+        if (player.isCar) {
+            player.width = 54; player.height = 34; player.speed = 8.5;
+            triggerSeamlessAlert("¡VEHÍCULO REQUISADO! Evasión automovilística activa.");
+        } else {
+            player.width = 26; player.height = 26; player.speed = 5.2;
+        }
+
+        entities = [];
+        goals = [];
+        lasers = [];
+
+        // Gestión de objetivos en base al tipo de encargo
+        if (m.targetType === "entrar_casa") {
+            // No ponemos icono en la calle, el objetivo se cumple detectando la posición interna
+            triggerSeamlessAlert("Busca la casa Noreste identificada en el radar inferior.");
+        } else {
+            spawnNextTargetSeamless(m.targetType);
+        }
+
+        for (let i = 0; i < 6; i++) {
+            spawnEnemySeamless(m.enemyType);
+        }
+    }
+
+    function spawnNextTargetSeamless(type) {
+        if (type === "servidor") {
+            // Forzar el desove de servidores EXCLUSIVAMENTE dentro de las casas transitables
+            let targetedHouse = worldHouses[landmarks.casaMision1Id]; // La del Noreste
+            goals.push({
+                x: targetedHouse.x + 25 + Math.random() * (targetedHouse.w - 60),
+                y: targetedHouse.y + 25 + Math.random() * (targetedHouse.h - 60),
+                width: 25, height: 25, type: type, pulse: 0
+            });
+        } else if (type === "guarida") {
+            goals.push({ x: landmarks.guaridaSuroeste.x, y: landmarks.guaridaSuroeste.y, width: 40, height: 40, type: type, pulse: 0 });
+        } else {
+            goals.push({
+                x: 350 + Math.random() * (WORLD_WIDTH - 700),
+                y: 250 + Math.random() * (WORLD_HEIGHT - 500),
+                width: 32, height: 32, type: type, pulse: 0
+            });
+        }
+    }
+
+    function spawnEnemySeamless(type) {
+        let angle = Math.random() * Math.PI * 2;
+        let radius = 450 + Math.random() * 250;
+        let ex = player.x + Math.cos(angle) * radius;
+        let ey = player.y + Math.sin(angle) * radius;
+
+        ex = Math.max(90, Math.min(WORLD_WIDTH - 90, ex));
+        ey = Math.max(90, Math.min(WORLD_HEIGHT - 90, ey));
+
+        entities.push({
+            x: ex, y: ey, width: 30, height: 30,
+            speed: 2.0 + Math.random() * 1.8,
+            type: type,
+            vx: -1 + Math.random() * 2, vy: -1 + Math.random() * 2
+        });
+    }
+
+    function triggerSeamlessAlert(text) {
+        alertBannerText = text;
+        alertBannerTimer = 140;
+    }
+
+    function gameLoop() {
+        if (gameState === 'intro') renderIntro();
+        else if (gameState === 'playing') updateAndRenderGameplay();
+    }
+
+    // --- CINEMÁTICA CON EXPLOSIÓN DE TORRES RESTAURADA ---
+    function renderIntro() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Firmamento
+        ctx.fillStyle = "#fff";
+        for(let i=0; i<30; i++) ctx.fillRect((i * 89) % canvas.width, (i * 53) % canvas.height, 2, 2);
+
+        // Cañón Wikiestrella
+        let wx = 140, wy = 160;
+        ctx.fillStyle = "#444"; ctx.beginPath(); ctx.arc(wx, wy, 55, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(wx + 15, wy - 15, 15, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#fff"; ctx.font = "bold 20px Arial"; ctx.fillText("W", wx - 9, wy + 7);
+
+        // Torres en pie o colapsando
+        let t1Y = 170, t2Y = 170;
+        if (introFrame > 110) { 
+            t1Y += (introFrame - 110) * 6; 
+            t2Y += (introFrame - 110) * 6.5; 
+        }
+        ctx.fillStyle = "#8ba0b0"; if (t1Y < canvas.height) ctx.fillRect(510, t1Y, 40, 240);
+        ctx.fillStyle = "#697d8c"; if (t2Y < canvas.height) ctx.fillRect(590, t2Y, 40, 240);
+
+        // Emisión del Relámpago de Energía Verde
+        if (introFrame > 35 && introFrame < 112) {
+            ctx.strokeStyle = "#22ff22"; ctx.lineWidth = 10;
+            ctx.beginPath(); ctx.moveTo(wx + 15, wy - 15); ctx.lineTo(530, 230); ctx.lineTo(610, 230); ctx.stroke();
+        }
+
+        // 💥 EFECTO DE DETONACIÓN INCENDIARIA EN LAS TORRES
+        if (introFrame > 65 && introFrame < 145) {
+            ctx.fillStyle = "#ff2200";
+            ctx.beginPath(); ctx.arc(530, 220, 65, 0, Math.PI * 2); ctx.arc(610, 230, 55, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#ffaa00";
+            ctx.beginPath(); ctx.arc(530, 220, 40, 0, Math.PI * 2); ctx.arc(610, 230, 35, 0, Math.PI * 2); ctx.fill();
+        }
+
+        ctx.fillStyle = "#fff"; ctx.font = "14px 'Courier New'"; ctx.textAlign = "center";
+        if (introFrame < 65) ctx.fillText("INICIALIZANDO: Cargando celdas de plasma de la Wikiestrella...", canvas.width/2, 410);
+        else if (introFrame < 120) { ctx.fillStyle = "#ff0055"; ctx.fillText("💥 ¡BOMBARDEO COINCIDENTE! Las torres arden antes de caer.", canvas.width/2, 410); }
+        else { ctx.fillStyle = "#00ffff"; ctx.fillText("Hackeo exitoso. Entrando al mapa de la isla...", canvas.width/2, 410); }
+
+        introFrame++;
+        if (introFrame > 195) {
+            gameState = 'playing';
+            initializeMissionData(0);
+        }
+    }
+
+    // --- BUCLE DE SIMULACIÓN ACCIONABLE CONTINUA ---
+    function updateAndRenderGameplay() {
+        const m = campaignMissions[currentMissionIdx];
+
+        let prevX = player.x;
+        let prevY = player.y;
+        let moveX = 0;
+        let moveY = 0;
+
+        if (keys["ArrowUp"] || keys["w"] || keys["W"]) moveY -= player.speed;
+        if (keys["ArrowDown"] || keys["s"] || keys["S"]) moveY += player.speed;
+        if (keys["ArrowLeft"] || keys["a"] || keys["A"]) moveX -= player.speed;
+        if (keys["ArrowRight"] || keys["d"] || keys["D"]) moveX += player.speed;
+
+        // Movimiento por componentes para permitir deslizamiento en esquinas de muros
+        player.x += moveX;
+        if (checkWallCollisions(player)) player.x = prevX;
+
+        player.y += moveY;
+        if (checkWallCollisions(player)) player.y = prevY;
+
+        // Márgenes del archipiélago
+        player.x = Math.max(45, Math.min(WORLD_WIDTH - 45, player.x));
+        player.y = Math.max(45, Math.min(WORLD_HEIGHT - 45, player.y));
+
+        // RASTREO DINÁMICO: Averiguar si el jugador está pisando DENTRO de una propiedad
+        player.insideHouseId = -1;
+        worldHouses.forEach(h => {
+            // Si el centro del personaje está contenido dentro del perímetro
+            if (player.x + player.width/2 >= h.x && player.x + player.width/2 <= h.x + h.w &&
+                player.y + player.height/2 >= h.y && player.y + player.height/2 <= h.y + h.h) {
+                player.insideHouseId = h.id;
+            }
+        });
+
+        // DISPARADOR DE LA MISIÓN 1 PARTE 1: Entrar físicamente por la puerta de la casa objetivo
+        if (m.targetType === "entrar_casa" && player.insideHouseId === landmarks.casaMision1Id) {
+            player.collected = 1;
+            hudProgress.innerText = "1/1";
+            triggerSeamlessAlert("¡HAS ENTRADO EN LA CASA! Iniciando sabotaje de terminales.");
+            advanceMissionSeamless();
+        }
+
+        // Ajustar encuadre óptico de la cámara
+        camera.x = Math.max(0, Math.min(WORLD_WIDTH - canvas.width, player.x - canvas.width / 2));
+        camera.y = Math.max(0, Math.min(WORLD_HEIGHT - canvas.height, player.y - canvas.height / 2));
+
+        // --- APUNTADO SELECTIVO AUTOMÁTICO DE LA MIRADA PERVERSA ---
+        if (keys[" "] && player.cooldown <= 0) {
+            let nearestEnemy = null;
+            let minDist = Infinity;
+
+            entities.forEach(enemy => {
+                let d = Math.sqrt(Math.pow(enemy.x - player.x, 2) + Math.pow(enemy.y - player.y, 2));
+                if (d < minDist) {
+                    minDist = d;
+                    nearestEnemy = enemy;
+                }
+            });
+
+            let attackAngle = 0;
+            if (nearestEnemy) {
+                attackAngle = Math.atan2(nearestEnemy.y - player.y, nearestEnemy.x - player.x);
+            }
+
+            lasers.push({
+                x: player.x + player.width / 2, y: player.y + player.height / 2,
+                vx: Math.cos(attackAngle) * 15, vy: Math.sin(attackAngle) * 15, size: 6
+            });
+            player.cooldown = 15;
+        }
+        if (player.cooldown > 0) player.cooldown--;
+
+        // Movimiento de ráfagas místicas
+        lasers.forEach((laser, lIdx) => {
+            laser.x += laser.vx; laser.y += laser.vy;
+            if (laser.x < 0 || laser.x > WORLD_WIDTH || laser.y < 0 || laser.y > WORLD_HEIGHT) lasers.splice(lIdx, 1);
+        });
+
+        // Dinámica y colisiones hostiles
+        entities.forEach((enemy, eIdx) => {
+            let dx = player.x - enemy.x;
+            let dy = player.y - enemy.y;
+            let dist = Math.sqrt(dx*dx + dy*dy);
+
+            if (dist < 500) {
+                enemy.x += (dx / dist) * enemy.speed;
+                enemy.y += (dy / dist) * enemy.speed;
+            } else {
+                enemy.x += enemy.vx * enemy.speed;
+                enemy.y += enemy.vy * enemy.speed;
+                if (Math.random() < 0.02) {
+                    enemy.vx = -1 + Math.random() * 2; enemy.vy = -1 + Math.random() * 2;
+                }
+            }
+
+            // Impacto de ráfagas en enemigos
+            lasers.forEach((laser, lIdx) => {
+                let boxL = { x: laser.x, y: laser.y, width: laser.size, height: laser.size };
+                if (checkCollision(boxL, enemy)) {
+                    lasers.splice(lIdx, 1);
+                    entities.splice(eIdx, 1);
+                    score += 60; hudScore.innerText = score;
+                    spawnEnemySeamless(m.enemyType);
+                }
+            });
+
+            // Daño directo infligido al jugador
+            if (checkCollision(player, enemy)) {
+                player.health -= 20;
+                hudHealth.innerText = player.health + "%";
+                enemy.x += (enemy.x > player.x ? 120 : -120);
+
+                if (player.health <= 0) {
+                    triggerWastedScreen("HAS SIDO ELIMINADO", "Te neutralizaron cumpliendo directrices.");
+                    return;
+                }
+            }
+        });
+
+        // Colisión con marcas recolectables convencionales
+        goals.forEach((goal, gIdx) => {
+            goal.pulse += 0.1;
+            if (checkCollision(player, goal)) {
+                goals.splice(gIdx, 1);
+                player.collected++;
+                score += 200; hudScore.innerText = score;
+                hudProgress.innerText = `${player.collected}/${m.targetGoal}`;
+
+                if (player.collected >= m.targetGoal) {
+                    triggerSeamlessAlert(`¡OBJETIVO ALCANZADO! Modificando órdenes en la esquina.`);
+                    advanceMissionSeamless();
+                } else {
+                    if (m.targetType !== "entrar_casa") spawnNextTargetSeamless(m.targetType);
+                }
+            }
+        });
+
+        // --- RENDERIZADO GENERAL EN CANVAS TRASLADADO ---
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(-camera.x, -camera.y);
+
+        // Praderas de la Isla
+        ctx.fillStyle = "#140526"; ctx.fillRect(60, 60, WORLD_WIDTH - 120, WORLD_HEIGHT - 120);
+
+        // Autopistas de asfalto
+        ctx.fillStyle = "#220e3b";
+        ctx.fillRect(160, 160, 130, WORLD_HEIGHT - 320);
+        ctx.fillRect(WORLD_WIDTH - 290, 160, 130, WORLD_HEIGHT - 320);
+        ctx.fillRect(160, WORLD_HEIGHT / 2 - 50, WORLD_WIDTH - 320, 100);
+
+        // RENDERIZADO ARQUITECTÓNICO DE CASAS (CON COBERTURA INTELIGENTE DE TECHO)
+        worldHouses.forEach(h => {
+            if (player.insideHouseId === h.id) {
+                // MODO INTERIOR: Se revela la vivienda por dentro al cruzar el umbral
+                ctx.fillStyle = "#360f4a"; ctx.fillRect(h.x, h.y, h.w, h.h); // Suelo base
+                
+                // Dibujar cuadrícula o divisiones internas simuladas (habitaciones)
+                ctx.strokeStyle = "rgba(255, 0, 85, 0.2)"; ctx.lineWidth = 1;
+                ctx.strokeRect(h.x + 15, h.y + 15, h.w - 30, h.h - 30);
+
+                // Mobiliario decorativo interno (Mesas / Camas de píxeles)
+                ctx.fillStyle = "#5c2512"; ctx.fillRect(h.x + 25, h.y + 25, 30, 20); // Mesa
+                ctx.fillStyle = "#1f4b5c"; ctx.fillRect(h.x + h.w - 55, h.y + 25, 35, 45); // Cama
+            } else {
+                // MODO EXTERIOR: Se ve el tejado cerrado en perspectiva cenital
+                ctx.fillStyle = "#431b6e"; ctx.fillRect(h.x, h.y, h.w, h.h);
+                ctx.fillStyle = "#5d2799"; 
+                ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(h.x + h.w/2, h.y + h.h/2); ctx.lineTo(h.x + h.w, h.y); ctx.fill();
+            }
+
+            // Muros maestros estructurales (Siempre visibles y sólidos)
+            ctx.strokeStyle = "#ff0055"; ctx.lineWidth = 4; ctx.strokeRect(h.x, h.y, h.w, h.h);
+            
+            // Hueco abierto de la Puerta (Pintado en cian brillante en la base inferior)
+            ctx.fillStyle = "#00ffff"; ctx.fillRect(h.doorX, h.doorY, h.doorW, 6);
+        });
+
+        // Dibujar coleccionables
+        goals.forEach(goal => {
+            ctx.font = "26px Arial";
+            let icon = "🎯";
+            if (goal.type === "servidor") icon = "💾";
+            if (goal.type === "guarida") icon = "🏢";
+            if (goal.type === "humor") icon = "🎭";
+            if (goal.type === "bob") icon = "🧽";
+            if (goal.type === "vicodin") icon = "💊";
+
+            let pulse = Math.sin(goal.pulse) * 3;
+            ctx.fillText(icon, goal.x, goal.y + 22 + pulse);
+        });
+
+        // Proyectiles cian de la mirada
+        lasers.forEach(laser => {
+            ctx.fillStyle = "#00ffff"; ctx.fillRect(laser.x, laser.y, laser.size, laser.size);
+        });
+
+        // Esbirros y coches policiales
+        entities.forEach(enemy => {
+            ctx.fillStyle = (enemy.type === "poli") ? "#0066ff" : "#cb003b";
+            if (enemy.type === "bache") ctx.fillStyle = "#b88600";
+            ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+            
+            ctx.fillStyle = "#fff"; ctx.font = "14px Arial";
+            let sym = "👤"; if (enemy.type === "poli") sym = "🚓"; if (enemy.type === "bache") sym = "🕳️";
+            ctx.fillText(sym, enemy.x + 6, enemy.y + 21);
+        });
+
+        // --- RENDERIZADO DEL AVATAR DEL JUGADOR ---
+        if (player.isCar) {
+            // Coche criminal
+            ctx.fillStyle = "#ff0055"; ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.fillStyle = "#000"; ctx.fillRect(player.x + 10, player.y + 3, 12, player.height - 6);
+            ctx.fillRect(player.x + 35, player.y + 3, 10, player.height - 6);
+            ctx.fillStyle = "#ffff00"; ctx.fillRect(player.x + player.width - 4, player.y + 3, 4, 6);
+        } else {
+            // Tio1.jpg a medida reducida para calzar por pasillos interiores
+            ctx.fillStyle = "#00f0ff"; ctx.fillRect(player.x, player.y + 7, player.width, 11); // Camisa
+            ctx.fillStyle = "#2d4b82"; ctx.fillRect(player.x + 2, player.y + 18, player.width - 4, 8); // Pantalón
+            ctx.fillStyle = "#fbd2a6"; ctx.fillRect(player.x + 5, player.y, 16, 8); // Rostro
+            ctx.fillStyle = "#000"; ctx.fillRect(player.x + 8, player.y + 3, 3, 3); ctx.fillRect(player.x + 15, player.y + 3, 3, 3); // Ojos
+        }
+
+        ctx.restore();
+
+        // --- MARQUESINA DE EVENTOS FLOTANTES ---
+        if (alertBannerTimer > 0) {
+            ctx.fillStyle = "rgba(255, 0, 85, 0.95)"; ctx.fillRect(0, 170, canvas.width, 40);
+            ctx.fillStyle = "#fff"; ctx.font = "bold 14px monospace"; ctx.textAlign = "center";
+            ctx.fillText(alertBannerText, canvas.width / 2, 195);
+            alertBannerTimer--;
+        }
+
+        // --- LA CAJA DE ENCARGOS AUTOMÁTICA EN LA ESQUINA SUPERIOR IZQUIERDA ---
+        ctx.fillStyle = "rgba(4, 1, 8, 0.92)"; ctx.strokeStyle = "#ff0055"; ctx.lineWidth = 2;
+        ctx.fillRect(15, 15, 420, 80); ctx.strokeRect(15, 15, 420, 80);
+        
+        ctx.fillStyle = "#00ffff"; ctx.font = "bold 11px monospace"; ctx.textAlign = "left";
+        ctx.fillText(`ÓRDENES ACTIVAS: ${m.title.toUpperCase()}`, 25, 32);
+        
+        ctx.fillStyle = "#fff"; ctx.font = "12px Arial";
+        let displayGoalStr = m.objective;
+        ctx.fillText(displayGoalStr, 25, 52);
+        
+        ctx.fillStyle = "#a2a2a2"; ctx.font = "10px monospace";
+        let locText = player.insideHouseId !== -1 ? `DENTRO DE LA PROPIEDAD #${player.insideHouseId}` : "RECORRIENDO LAS CALLES DE LA ISLA";
+        ctx.fillText(`ENTORNO: ${locText}`, 25, 72);
+
+        // --- RADAR DE MINI-MAPA DE NAVEGACIÓN ---
+        let rx = 20, ry = canvas.height - 140, rw = 120, rh = 120;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.85)"; ctx.fillRect(rx, ry, rw, rh);
+        ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 2; ctx.strokeRect(rx, ry, rw, rh);
+        ctx.fillStyle = "#1e0b30"; ctx.fillRect(rx + 4, ry + 4, rw - 8, rh - 8);
+
+        // Posición tuya (Cian)
+        let prx = rx + (player.x / WORLD_WIDTH) * rw;
+        let pry = ry + (player.y / WORLD_HEIGHT) * rh;
+        ctx.fillStyle = "#00ffff"; ctx.beginPath(); ctx.arc(prx, pry, 3.5, 0, Math.PI*2); ctx.fill();
+
+        // Posición de la meta o casa objetivo primordial (Fucsia parpadeante)
+        let targetRadarX = 0, targetRadarY = 0;
+        if (m.targetType === "entrar_casa" || m.targetType === "servidor") {
+            let targetH = worldHouses[landmarks.casaMision1Id];
+            targetRadarX = rx + ((targetH.x + targetH.w/2) / WORLD_WIDTH) * rw;
+            targetRadarY = ry + ((targetH.y + targetH.h/2) / WORLD_HEIGHT) * rh;
+        } else if (goals.length > 0) {
+            targetRadarX = rx + (goals[0].x / WORLD_WIDTH) * rw;
+            targetRadarY = ry + (goals[0].y / WORLD_HEIGHT) * rh;
+        }
+
+        if (targetRadarX > 0) {
+            ctx.fillStyle = (Math.floor(Date.now() / 200) % 2 === 0) ? "#ff0055" : "#ffffff";
+            ctx.beginPath(); ctx.arc(targetRadarX, targetRadarY, 4.5, 0, Math.PI*2); ctx.fill();
+        }
+    }
+
+    function advanceMissionSeamless() {
+        let nextIdx = currentMissionIdx + 1;
+        if (nextIdx < campaignMissions.length) {
+            initializeMissionData(nextIdx);
+        } else {
+            gameState = 'menu';
+            overlay.classList.remove("hidden");
+            document.getElementById("overlay-title").innerText = "CAMPAÑA CONCLUIDA CON ÉXITO";
+            document.getElementById("overlay-btn").innerText = "REINICIAR TODA LA AVENTURA URBANA";
+        }
+    }
+
+    // Discriminador físico para no atravesar paredes perimetrales sólidas
+    function checkWallCollisions(rect) {
+        for (let i = 0; i < solidWalls.length; i++) {
+            let w = solidWalls[i];
+            if (rect.x < w.x + w.w && rect.x + rect.width > w.x &&
+                rect.y < w.y + w.h && rect.y + rect.height > w.y) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function checkCollision(r1, r2) {
+        return r1.x < r2.x + r2.width && r1.x + r1.width > r2.x &&
+               r1.y < r2.y + r2.height && r1.y + r1.height > r2.y;
+    }
+
+    function triggerWastedScreen(title, msg) {
+        gameState = 'menu';
+        clearInterval(gameInterval);
+        overlay.classList.remove("hidden");
+        document.getElementById("overlay-title").innerText = title;
+        document.getElementById("overlay-btn").innerText = "REANUDAR ENCARGO DE LA ESQUINA";
+        document.getElementById("overlay-btn").onclick = () => {
+            overlay.classList.add("hidden");
+            gameState = 'playing';
+            initializeMissionData(currentMissionIdx);
+            clearInterval(gameInterval);
+            gameInterval = setInterval(gameLoop, 1000 / 60);
+        };
+    }
+</script>
+</body>
+</html>
