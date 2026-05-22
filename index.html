@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grand-Theft-Auto-Tio1.jpg-Stories</title>
+    <style>
+        body {
+            background-color: #0b0114;
+            color: #00ffff;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 10px;
+            user-select: none;
+        }
+        h1 {
+            color: #ff0055;
+            text-shadow: 3px 3px #000, -2px -2px #00ffff;
+            font-size: 34px;
+            margin: 5px 0;
+        }
+        .subtitle {
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            margin-bottom: 10px;
+        }
+        #game-frame {
+            position: relative;
+            display: inline-block;
+            border: 5px solid #ff0055;
+            background-color: #000;
+            box-shadow: 0 0 30px #ff0055;
+        }
+        .hud {
+            display: flex;
+            justify-content: space-between;
+            background: linear-gradient(90deg, #ff0055, #00ffff);
+            color: #fff;
+            padding: 8px 15px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 15px;
+            text-shadow: 1px 1px #000;
+        }
+        canvas {
+            display: block;
+            background: #0f031e;
+        }
+        .overlay {
+            position: absolute;
+            top: 36px;
+            left: 0;
+            width: 800px;
+            height: 450px;
+            background: rgba(8, 2, 15, 0.96);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            padding: 25px;
+            box-sizing: border-box;
+        }
+        .overlay h2 {
+            color: #00ffff;
+            font-size: 24px;
+            margin-bottom: 8px;
+            font-family: 'Impact', sans-serif;
+            text-shadow: 2px 2px #ff0055;
+        }
+        .overlay p {
+            font-size: 13px;
+            line-height: 1.4;
+            max-width: 700px;
+            color: #eee;
+            text-align: justify;
+            background: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-left: 3px solid #ff0055;
+        }
+        button {
+            background: #ff0055;
+            color: #fff;
+            border: 3px solid #00ffff;
+            padding: 10px 25px;
+            font-size: 18px;
+            font-family: 'Impact', sans-serif;
+            cursor: pointer;
+            margin-top: 10px;
+            text-shadow: 1px 1px #000;
+        }
+        button:hover {
+            background: #00ffff;
+            color: #000;
+            box-shadow: 0 0 15px #ff0055;
+        }
+        .hidden { display: none !important; }
+        .controls-tip {
+            margin-top: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Grand-Theft-Auto-Tio1.jpg-Stories</h1>
+    <div class="subtitle">Trilogía de la Misión I Integrada — 100% Fiel al Lore de Tuvalu Ulterior</div>
+
+    <div id="game-frame">
+        <div class="hud">
+            <div>FASE: <span id="hud-mission">Cargando cartucho...</span></div>
+            <div>VIDA: <span id="hud-health" style="color: #00ff00;">100%</span></div>
+            <div>PROGRESO: <span id="hud-progress">0/0</span></div>
+            <div>PUNTOS: <span id="hud-score">0</span></div>
+        </div>
+
+        <canvas id="gtaCanvas" width="800" height="450"></canvas>
+
+        <div id="screen-overlay" class="overlay">
+            <h2 id="overlay-title">EDICIÓN ULTRA-NERD PS5</h2>
+            <p id="overlay-text">Prepárate para presenciar la caída de la gran enciclopedia corporativa y el nacimiento de una leyenda criminal en Tuvalu Ulterior. Todo comienza con el gran ataque orbital.</p>
+            <button id="overlay-btn" onclick="startIntroCinematic()">VER CINEMÁTICA E INICIAR</button>
+        </div>
+    </div>
+
+    <div class="controls-tip">
+        [W, A, S, D / Flechas] Moverse | [Espacio] ¡Desatar la Mirada Perversa contra los opresores!
+    </div>
+
+<script>
+    const canvas = document.getElementById("gtaCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const overlay = document.getElementById("screen-overlay");
+    const oTitle = document.getElementById("overlay-title");
+    const oText = document.getElementById("overlay-text");
+    const oBtn = document.getElementById("overlay-btn");
+    const hudMission = document.getElementById("hud-mission");
+    const hudProgress = document.getElementById("hud-progress");
+    const hudScore = document.getElementById("hud-score");
+    const hudHealth = document.getElementById("hud-health");
+
+    let gameState = 'menu';
+    let gameInterval;
+    let score = 0;
+    let keys = {};
+    let introFrame = 0;
+    let missionTimer = 0;
+
+    let player, entities, goals, lasers;
+
+    window.addEventListener("keydown", e => { keys[e.key] = true; if(e.key === " ") e.preventDefault(); });
+    window.addEventListener("keyup", e => keys[e.key] = false);
+
+    // BASE DE DATOS DE CAMPAÑA COMPLETA ACTUALIZADA (CON MISIÓN I DIVIDIDA EN 3 PARTES)
+    const campaignMissions = [
+        {
+            title: "Misión I (P1). Without a face: La Infiltración",
+            text: "Recién llegado a Tuvalu Ulterior tras sobrevivir a un naufragio catastrófico, necesitas dinero con urgencia para poder comprar provisiones. No te queda otra opción que deambular por los suburbios y colarte en una lujosa casa al azar en medio de la ciudad para ver qué puedes saquear.",
+            objective: "Esquiva los baches del asfalto y entra en la casa marcada",
+            targetType: "casa", enemyType: "bache", targetGoal: 1, timed: false
+        },
+        {
+            title: "Misión I (P2). Without a face: Vandalismo",
+            text: "¡Sorpresa! Dentro de la propiedad te topas de frente con la peligrosa banda de Guy2.jpg, quienes están ocupados vandalizando servidores de la Wikipedia de forma masiva. Bajo una inmediata y sutil amenaza de muerte, te unes al equipo sin pensártelo dos veces para colapsar la base de datos enemiga usando tu Mirada Perversa.",
+            objective: "¡Usa tu MIRADA PERVERSA (Espacio) para fulminar los 5 servidores!",
+            targetType: "servidor", enemyType: "defensa", targetGoal: 5, timed: false
+        },
+        {
+            title: "Misión I (P3). Without a face: Código Rojo",
+            text: "¡Se acabó la fiesta! De repente, el ulular de potentes sirenas retumba afuera: la policía local de Tuvalu ha rodeado por completo el perímetro del vecindario. Debes cooperar de inmediato, subir al coche de huida de la tropa criminal y conducir evadiendo las patrullas hasta llegar a salvo a la guarida secreta.",
+            objective: "¡Esquiva las patrullas policiales y alcanza la Guarida Secreta!",
+            targetType: "guarida", enemyType: "poli", targetGoal: 1, timed: false
+        },
+        {
+            title: "Misión II. Sense of humour",
+            text: "Guy2.jpg te introduce ante su jefe, el capo mafioso Guy1.jpg. Tras recibirte con agrado, sales con Guy2.jpg de nuevo a la calle para hacer unos recados. Concretamente, patrullar la ciudad y reclutar a personas que destaquen por su sentido del humor, para integrarlos en la nómina de Inciclopedia y así poder aumentar los ataques vandálicos contra La Ladrona. En esta misión conoces también a Motumbo.",
+            objective: "Patrulla y recluta a 6 personas graciosas en la calle",
+            targetType: "humor", enemyType: "aburrido", targetGoal: 6, timed: false
+        },
+        {
+            title: "Misión III. Lovely",
+            text: "Para intentar arreglar un poco su extrema y excesiva fealdad, Guy1.jpg ha oído que sólo un tipo especial de esponja puede, frotándosela contra la cara, lograr los efectos deseados. En esta misión, debes conducir la limusina de Guy1.jpg por diversas partes de la ciudad, consultando a los distintos soplones para descubrir la localización del objetivo. Finalmente, tras perseguir a uno de ellos, llegas a la guarida de Bob Esponja, a quien Guy1.jpg hace pedacitos para probar el experimento.",
+            objective: "Persigue los soplones hasta atrapar a Bob Esponja",
+            targetType: "bob", enemyType: "obstaculo", targetGoal: 1, timed: false
+        },
+        {
+            title: "Misión IV. Writer on edge",
+            text: "Guy1.jpg desea redactar su testamento por si le pasa algo. Como las plumas huyen de sus manos por la fealdad, te encarga localizar a un redactor. Guy2.jpg sugiere que visites a Mike de Cervantes, exitoso compositor de reguetón. Sin embargo, cuando llegas a su casa ves a unos mafiosos atacándola, así que los matas y rescatas al pobre Miguel. Este te pide que lo llevo a la mansión de su amigo House.",
+            objective: "Elimina a los mafiosos para rescatar a Miguel de Cervantes",
+            targetType: "miguel", enemyType: "mafioso", targetGoal: 1, timed: false
+        },
+        {
+            title: "Misión V. Diagnosis",
+            text: "House se encuentra en estado de nirvana y no puede ni articular palabra. Con ayuda de Motumbo, robas una furgoneta y sales zumbando en dirección a su casa, donde encuentras al doctor Wilson tratando de beneficiarse a la doctora Cuddy. Matas a Wilson, encuentras el Vicodín y de paso te llevas también a Cuddy, a quien conduces a la presencia de House.",
+            objective: "Elimina al Dr. Wilson y escolta a la Dra. Cuddy",
+            targetType: "cuddy", enemyType: "wilson", targetGoal: 1, timed: false
+        },
+        {
+            title: "Misión VI. No canon on vicodin",
+            text: "Ya recuperado tras administrarse su dosis diaria de Vicodin, House te envía al puerto para recibir un gran cargamento de mercancías. Descubres que matones a sueldo de la Innombrable han decomisado los paquetes. Te acercas sigilosamente en la oscuridad, matas a varios en silencio y cargas la mercancía en la furgoneta mientras Motumbo coloca explosivos por todo el lugar. Regresas rápidamente a la mansión House.",
+            objective: "Recupera 6 cargamentos de Vicodín en el puerto",
+            targetType: "vicodin", enemyType: "innombrable", targetGoal: 6, timed: false
+        },
+        {
+            title: "Misión VII. Chasing Chase around",
+            text: "En su último encargo, House te pide que elimines a su antiguo amante y socio, Robert Chase, que ahora actúa por su cuenta respaldado por la mafia australiana. Entras en su mansión a lo grande acribillando todo lo que se mueve. Tras perseguir a Chase por todo el edificio, tienes que utilizar tu Mirada Perversa como un bazooka para derribar el helicóptero en el que trata de huir.",
+            objective: "Derriba el helicóptero de Robert Chase con tu Mirada Perversa",
+            targetType: "helicoptero", enemyType: "mafia_aus", targetGoal: 1, timed: false
+        },
+        {
+            title: "Misión VIII. Enemy at the Gates",
+            text: "Según las cuentas de Chase, este no pagaba ningún canon informático. Por orden de Guy1.jpg, visitas la tienda del proveedor local, un pequeño geek llamado Billy Gates. Tras hacerle una cara nueva, Gates confiesa que la Innombrable utilizaba a Chase para expandir su influencia. Además, el líder Ted Baptista va a visitar Tuvalu.",
+            objective: "Dale una paliza a Billy Gates en su tienda de informática",
+            targetType: "billy", enemyType: "defensa", targetGoal: 1, timed: false
+        },
+        {
+            title: "Misión IX. Welcome Mr. Teddy",
+            text: "Guy1.jpg te encarga recibir cariñosamente a Ted. Noqueas a un policía para robar su uniforme y te unes a la comitiva. En un semáforo secuestras la limusina donde viaja Ted. Escapas a toda pastilla hasta un descampado, donde debes volar por los aires el vehículo con Baptista dentro y eludir la persecución policial de tres estrellas.",
+            objective: "Captura la limusina de Ted Baptista y dinamítala",
+            targetType: "limu_ted", enemyType: "escolta", targetGoal: 1, timed: false
+        },
+        {
+            title: "Misión X. Only one guy",
+            text: "El estatus jerárquico criminal nunca dura. Guy2.jpg te contrata para que elimines a su jefe, Guy1.jpg. Primero consigues un potente veneno en la mansión House. Luego te infiltras sigilosamente en el hotel de lujo donde Guy1.jpg está pasando la noche y envenenas todos los productos que contiene su nevera. A la mañana siguiente, Guy1.jpg es historia.",
+            objective: "Infíltrate y envenena la nevera de lujo de Guy1.jpg",
+            targetType: "nevera", enemyType: "guarda", targetGoal: 1, timed: false
+        },
+        {
+            title: "Misión XI. 24 seconds to boom",
+            text: "Luego de que asesinas a Guy1.jpg, Guy2.jpg te encarga infiltrarte en la sede de La Innombrable en Bikini para destruirla. Ella nota tus planes siniestros y envía una comitiva. Dotado de la katana de Kill Bill y tu mirada perversa, debes acabar con esta enorme comitiva y escapar del edificio en un tiempo límite estricto.",
+            objective: "¡Acaba con la comitiva enemiga y escapar antes de 24 segundos!",
+            targetType: "escape", enemyType: "comitiva", targetGoal: 5, timed: true, limit: 24
+        },
+        {
+            title: "Misión XII. Awakening of Mr. Norris",
+            text: "El señor Chuck Norris es enviado a ayudarte a destruir a La Innombrable, pero ve tus serias heridas y decide enfrentarse a ella solo. Aquí deberás recolectar y darle muchos porros a Chuck para que pueda proseguir su senda de destrucción absoluta. Al final La Innombrable atacará y despertarás prometiendo venganza... ¡Chan Chan CHAN!",
+            objective: "Suministra 10 porros a Chuck Norris para desatar su ira",
+            targetType: "porro", enemyType: "innombrable_final", targetGoal: 10, timed: false
+        }
+    ];
+
+    let currentMissionIdx = 0;
+
+    function startIntroCinematic() {
+        overlay.classList.add("hidden");
+        gameState = 'intro';
+        introFrame = 0;
+        hudMission.innerText = "Cinemática Orbital";
+        clearInterval(gameInterval);
+        gameInterval = setInterval(gameLoop, 1000 / 60);
+    }
+
+    function startMission(idx) {
+        overlay.classList.add("hidden");
+        gameState = 'playing';
+        currentMissionIdx = idx;
+        
+        const m = campaignMissions[idx];
+        hudMission.innerText = m.title;
+        hudProgress.innerText = `0/${m.targetGoal}`;
+        
+        hudHealth.innerText = "100%";
+        hudHealth.style.color = "#00ff00";
+
+        if (m.timed) {
+            missionTimer = m.limit * 60; 
+        }
+
+        player = {
+            x: 100, y: 200,
+            width: 44, height: 44,
+            speed: 5,
+            collected: 0,
+            cooldown: 0,
+            health: 100 // Restauración de vida al 100% por seguridad
+        };
+
+        entities = [];
+        goals = [];
+        lasers = [];
+
+        spawnGoal(m.targetType);
+        for (let i = 0; i < 4; i++) {
+            spawnEnemy(m.enemyType);
+        }
+
+        // CONTROL RIGUROSO DE TRANSICIÓN: Evita la repetición de la animación inicial
+        clearInterval(gameInterval);
+        gameInterval = setInterval(gameLoop, 1000 / 60);
+    }
+
+    function spawnGoal(type) {
+        goals.push({
+            x: 250 + Math.random() * 450,
+            y: 60 + Math.random() * 320,
+            width: 30, height: 30,
+            type: type,
+            pulse: 0
+        });
+    }
+
+    function spawnEnemy(type) {
+        let eSpeed = 2.5 + Math.random() * 3;
+        if (type === 'comitiva' || type === 'poli') eSpeed = 4 + Math.random() * 2;
+        
+        entities.push({
+            x: canvas.width + Math.random() * 250,
+            y: 60 + Math.random() * 320,
+            width: type === 'helicoptero' ? 60 : 32,
+            height: type === 'helicoptero' ? 40 : 35,
+            speed: eSpeed,
+            type: type
+        });
+    }
+
+    function gameLoop() {
+        if (gameState === 'intro') {
+            renderIntro();
+        } else if (gameState === 'playing') {
+            updateAndRenderGameplay();
+        }
+    }
+
+    // --- CINEMÁTICA OBLIGATORIA DE LAS TORRES GEMELAS Y LA WIKIESTRELLA ---
+    function renderIntro() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#000";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "#fff";
+        for(let i=0; i<40; i++) {
+            ctx.fillRect((i * 67) % canvas.width, (i * 31) % canvas.height, 2, 2);
+        }
+
+        let wx = 150, wy = 180;
+        ctx.fillStyle = "#4a4a4a";
+        ctx.beginPath(); ctx.arc(wx, wy, 70, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#222";
+        ctx.beginPath(); ctx.arc(wx + 25, wy - 25, 20, 0, Math.PI * 2); ctx.fill();
+        
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 26px Arial";
+        ctx.fillText("W", wx - 10, wy + 10);
+
+        let h1Y = 150, h2Y = 150;
+        if (introFrame > 130) {
+            h1Y += (introFrame - 130) * 4;
+            h2Y += (introFrame - 130) * 4.5;
+        }
+
+        ctx.fillStyle = "#8a9ba8";
+        if (h1Y < canvas.height) ctx.fillRect(500, h1Y, 40, 300);
+        ctx.fillStyle = "#708090";
+        if (h2Y < canvas.height) ctx.fillRect(580, h2Y, 40, 300);
+
+        if (introFrame > 60 && introFrame < 140) {
+            ctx.strokeStyle = "#00ff33";
+            ctx.lineWidth = 12;
+            ctx.shadowBlur = 25; ctx.shadowColor = "#00ff33";
+            ctx.beginPath();
+            ctx.moveTo(wx + 25, wy - 25);
+            ctx.lineTo(520, 240); ctx.lineTo(600, 240);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        if (introFrame > 90 && introFrame < 170) {
+            ctx.fillStyle = "#ff4500";
+            ctx.beginPath(); ctx.arc(520, 220, 50, 0, Math.PI*2); ctx.arc(600, 230, 45, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = "#ffcc00";
+            ctx.beginPath(); ctx.arc(520, 220, 25, 0, Math.PI*2); ctx.arc(600, 230, 20, 0, Math.PI*2); ctx.fill();
+        }
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "15px 'Courier New'";
+        ctx.textAlign = "center";
+        if (introFrame < 70) {
+            ctx.fillText("CINEMÁTICA: Las Torres Gemelas de la Wikipedia operan con normalidad...", canvas.width/2, 410);
+        } else if (introFrame >= 70 && introFrame < 140) {
+            ctx.fillStyle = "#ff0055";
+            ctx.fillText("¡ALERTA! La Wikiestrella de la Muerte destruye las Torres de la Wikipedia corporativa.", canvas.width/2, 410);
+        } else {
+            ctx.fillStyle = "#00ffff";
+            ctx.fillText("Sufres un accidente aéreo derivado del colapso... Despertando en Tuvalu Ulterior.", canvas.width/2, 410);
+        }
+
+        introFrame++;
+        if (introFrame > 240) {
+            showIntermission(0); 
+        }
+    }
+
+    function showIntermission(idx) {
+        gameState = 'intermission';
+        clearInterval(gameInterval);
+        const m = campaignMissions[idx];
+        oTitle.style.color = "#00ffff";
+        oTitle.innerText = m.title;
+        oText.innerText = m.text;
+        oBtn.innerText = `INICIAR ENCARGO: ${m.title.split(')')[0].length < 10 ? m.title.split(').')[1] : m.title.split('.')[1]}`;
+        oBtn.onclick = () => startMission(idx);
+        overlay.classList.remove("hidden");
+    }
+
+    // --- PROCESAMIENTO MECÁNICO DE LA ACCIÓN ---
+    function updateAndRenderGameplay() {
+        const m = campaignMissions[currentMissionIdx];
+
+        if (m.timed) {
+            missionTimer--;
+            let secondsLeft = Math.ceil(missionTimer / 60);
+            hudMission.innerText = `${m.title} | ⏰ ¡ESCAPA: ${secondsLeft}s!`;
+            if (missionTimer <= 0) {
+                triggerGameOver("¡BOOM! DETONACIÓN ADVERSA", "El edificio colapsó sobre ti por no cumplir los plazos.");
+                return;
+            }
+        }
+
+        // Desplazamiento del Sprite
+        if (keys["ArrowUp"] || keys["w"] || keys["W"]) player.y -= player.speed;
+        if (keys["ArrowDown"] || keys["s"] || keys["S"]) player.y += player.speed;
+        if (keys["ArrowLeft"] || keys["a"] || keys["A"]) player.x -= player.speed;
+        if (keys["ArrowRight"] || keys["d"] || keys["D"]) player.x += player.speed;
+
+        if (player.x < 0) player.x = 0;
+        if (player.x > canvas.width - player.width) player.x = canvas.width - player.width;
+        if (player.y < 50) player.y = 50;
+        if (player.y > canvas.height - player.height) player.y = canvas.height - player.height;
+
+        // Disparo ofensivo: La Mirada Perversa
+        if (keys[" "] && player.cooldown <= 0) {
+            lasers.push({
+                x: player.x + player.width - 4,
+                y: player.y + 10,
+                width: 35,
+                height: 7,
+                speed: 14
+            });
+            player.cooldown = 12;
+        }
+        if (player.cooldown > 0) player.cooldown--;
+
+        lasers.forEach((laser, lIdx) => {
+            laser.x += laser.speed;
+            if (laser.x > canvas.width) lasers.splice(lIdx, 1);
+        });
+
+        // Actualización de enemigos e impactos destructivos
+        entities.forEach((enemy, eIdx) => {
+            enemy.x -= enemy.speed;
+            if (enemy.x < -enemy.width) {
+                entities.splice(eIdx, 1);
+                spawnEnemy(m.enemyType);
+            }
+
+            // Destrucción por rayo láser de Mirada Perversa
+            lasers.forEach((laser, lIdx) => {
+                if (checkCollision(laser, enemy)) {
+                    lasers.splice(lIdx, 1);
+                    entities.splice(eIdx, 1);
+                    score += 50;
+                    hudScore.innerText = score;
+                    spawnEnemy(m.enemyType);
+                }
+            });
+
+            // COMPORTAMIENTO FIEL A LA VERSION 1: El daño reduce vida directa
+            if (checkCollision(player, enemy)) {
+                player.health -= 20; // Sustracción masiva del 20%
+                hudHealth.innerText = player.health + "%";
+                
+                if (player.health <= 40) hudHealth.style.color = "#ff0055";
+                
+                enemy.x = canvas.width + Math.random() * 250; 
+
+                if (player.health <= 0) {
+                    triggerGameOver("¡ELIMINADO! (WASTED)", `Te han liquidado sin piedad en los barrios marginales durante la execución de "${m.title}".`);
+                    return;
+                }
+            }
+        });
+
+        // Captura de marcadores de progreso
+        goals.forEach((goal, gIdx) => {
+            goal.pulse += 0.1;
+            if (checkCollision(player, goal)) {
+                goals.splice(gIdx, 1);
+                player.collected++;
+                score += 150;
+                hudScore.innerText = score;
+                hudProgress.innerText = `${player.collected}/${m.targetGoal}`;
+
+                if (player.collected >= m.targetGoal) {
+                    let nextIdx = currentMissionIdx + 1;
+                    if (nextIdx < campaignMissions.length) {
+                        showIntermission(nextIdx);
+                    } else {
+                        gameState = 'intermission';
+                        clearInterval(gameInterval);
+                        oTitle.style.color = "#00ff00";
+                        oTitle.innerText = "¡REINADO CRIMINAL ABSOLUTO!";
+                        oText.innerText = "Has superado la campaña completa de Grand-Theft-Auto-Tio1.jpg-Stories. Conquistaste las subfases, diste de fumar a Chuck Norris y pusiste de rodillas a La Innombrable. ¡Padre de la Patria legítimo! Chan Chan CHAN!";
+                        oBtn.innerText = "REPLAY CAMPAÑA DESDE EL ESPACIO";
+                        oBtn.onclick = () => { startIntroCinematic(); };
+                        overlay.classList.remove("hidden");
+                    }
+                } else {
+                    spawnGoal(m.targetType);
+                }
+            }
+        });
+
+        // --- ENTORNO GRÁFICO ---
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "#140426";
+        ctx.fillRect(0, 50, canvas.width, canvas.height - 50);
+        ctx.strokeStyle = "#ff0055";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([25, 15]);
+        ctx.beginPath();
+        ctx.moveTo(0, canvas.height / 2 + 25);
+        ctx.lineTo(canvas.width, canvas.height / 2 + 25);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        lasers.forEach(laser => {
+            ctx.fillStyle = "#ff00ff";
+            ctx.shadowBlur = 15; ctx.shadowColor = "#ff00ff";
+            ctx.fillRect(laser.x, laser.y, laser.width, laser.height);
+            ctx.shadowBlur = 0;
+        });
+
+        goals.forEach(goal => {
+            ctx.font = "24px Arial";
+            let icon = "🎯";
+            if (goal.type === "casa") icon = "🏠";
+            if (goal.type === "servidor") icon = "💾";
+            if (goal.type === "guarida") icon = "🏢";
+            if (goal.type === "humor") icon = "🎭";
+            if (goal.type === "bob") icon = "🧽";
+            if (goal.type === "miguel") icon = "✍️";
+            if (goal.type === "cuddy") icon = "👩‍⚕️";
+            if (goal.type === "vicodin") icon = "💊";
+            if (goal.type === "helicoptero") icon = "🚁";
+            if (goal.type === "billy") icon = "💻";
+            if (goal.type === "limu_ted") icon = "🚘";
+            if (goal.type === "nevera") icon = "🧊";
+            if (goal.type === "escape") icon = "🚪";
+            if (goal.type === "porro") icon = "🍁";
+
+            let sizeBonus = Math.sin(goal.pulse) * 4;
+            ctx.fillText(icon, goal.x - sizeBonus/2, goal.y + 20 + sizeBonus/2);
+        });
+
+        entities.forEach(enemy => {
+            ctx.fillStyle = (enemy.type === "poli" || enemy.type === "comitiva") ? "#0033ff" : "#cc0000";
+            if (enemy.type === "bache") ctx.fillStyle = "#ffcc00";
+
+            if(enemy.type === "helicoptero") {
+                ctx.fillStyle = "#444";
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                ctx.fillStyle = "#fff";
+                ctx.fillRect(enemy.x - 5, enemy.y - 5, enemy.width + 10, 5);
+            } else {
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+            }
+            
+            ctx.fillStyle = "#fff";
+            ctx.font = "14px Arial";
+            let label = "👤";
+            if (enemy.type === "poli") label = "🚓";
+            if (enemy.type === "bache") label = "🕳️";
+            if (enemy.type === "innombrable" || enemy.type === "innombrable_final") label = "🕵️";
+            if (enemy.type === "helicoptero") label = "🚁";
+            ctx.fillText(label, enemy.x + 6, enemy.y + 22);
+        });
+
+        // DISTRIBUCIÓN CROMÁTICA DE TIO1.JPG (Camisa cian y gafas impenetrables)
+        ctx.fillStyle = "#00f0ff";
+        ctx.fillRect(player.x, player.y + 12, player.width, 18);
+        ctx.fillStyle = "#2d4b82";
+        ctx.fillRect(player.x + 4, player.y + 30, player.width - 8, 15);
+
+        ctx.fillStyle = "#fbd2a6"; 
+        ctx.fillRect(player.x + 10, player.y, 24, 15);
+        ctx.fillStyle = "#543924"; 
+        ctx.fillRect(player.x + 8, player.y, 28, 5); 
+        ctx.fillRect(player.x + 8, player.y, 4, 12);
+        ctx.fillRect(player.x + 32, player.y, 4, 12);
+
+        ctx.fillStyle = "#000";
+        ctx.fillRect(player.x + 12, player.y + 5, 8, 5);
+        ctx.fillRect(player.x + 24, player.y + 5, 8, 5);
+
+        ctx.fillStyle = "#211105";
+        ctx.fillRect(player.x + 15, player.y + 11, 14, 3);
+    }
+
+    function triggerGameOver(title, msg) {
+        gameState = 'intermission';
+        clearInterval(gameInterval);
+        oTitle.style.color = "#ff0000";
+        oTitle.innerText = title;
+        oText.innerText = msg;
+        oBtn.innerText = "REINTENTAR DESDE PUNTO DE CONTROL";
+        oBtn.onclick = () => startMission(currentMissionIdx);
+        overlay.classList.remove("hidden");
+    }
+
+    function checkCollision(r1, r2) {
+        return r1.x < r2.x + r2.width &&
+               r1.x + r1.width > r2.x &&
+               r1.y < r2.y + r2.height &&
+               r1.y + r1.height > r2.y;
+    }
+</script>
+</body>
+</html>
