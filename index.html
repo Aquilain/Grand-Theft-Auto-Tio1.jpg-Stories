@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grand-Theft-Auto-Tio1.jpg-Stories: Wikipedia Vandalism Edition</title>
+    <style>
+        body {
+            background-color: #ADD8E6;
+            color: #000;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 10px;
+            user-select: none;
+        }
+        h1 {
+            color: #ff0055;
+            text-shadow: 2px 2px #E7D6A8, -1px -1px #000;
+            font-size: 30px;
+            margin: 3px 0;
+        }
+        .subtitle {
+            color: #333;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            margin-bottom: 6px;
+        }
+        #game-frame {
+            position: relative;
+            display: inline-block;
+            border: 5px solid #ff0055;
+            background-color: #000;
+            box-shadow: 0 0 35px #ff0055;
+        }
+        .hud {
+            display: flex;
+            justify-content: space-between;
+            background: linear-gradient(90deg, #ff0055, #E7D6A8);
+            color: #fff;
+            padding: 5px 15px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 13px;
+            text-shadow: 1px 1px #000;
+        }
+        canvas {
+            display: block;
+            background: #40E0D0; /* Agua marina de Tuvalu */
+        }
+        .overlay {
+            position: absolute;
+            top: 32px;
+            left: 0;
+            width: 800px;
+            height: 450px;
+            background: rgba(12, 20, 32, 0.97);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+        .overlay h2 {
+            color: #00ffff;
+            font-size: 25px;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px #ff0055;
+        }
+        button {
+            background: #ff0055;
+            color: #fff;
+            border: 3px solid #E7D6A8;
+            padding: 12px 30px;
+            font-size: 20px;
+            font-family: 'Impact', sans-serif;
+            cursor: pointer;
+            text-shadow: 1px 1px #000;
+        }
+        button:hover {
+            background: #00ffff;
+            color: #000;
+            box-shadow: 0 0 15px #ff0055;
+        }
+        .hidden { display: none !important; }
+        .controls-tip {
+            margin-top: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Grand-Theft-Auto-Tio1.jpg-Stories</h1>
+    <div class="subtitle">Wikipedia Vandalism & Big HQ Update — El Origen del Caos</div>
+
+    <div id="game-frame">
+        <div class="hud">
+            <div>ISLA: <span id="hud-zone">Tuvalu Paradise</span></div>
+            <div>SALUD: <span id="hud-health" style="color: #00ff00;">100%</span></div>
+            <div>PROGRESO: <span id="hud-progress">0/0</span></div>
+            <div>SCORE: <span id="hud-score">0</span></div>
+        </div>
+
+        <canvas id="gtaCanvas" width="800" height="450"></canvas>
+
+        <div id="screen-overlay" class="overlay">
+            <h2 id="overlay-title">MISIÓN I: OPERACIÓN WIKIPEDIA</h2>
+            <p style="max-width:650px; text-align:justify; font-size:12px; color:#ccc; line-height:1.4;">
+                Comienzas a pie en el sector Oeste. Tu primerísima orden es entrar a la casa residencial, acceder a la terminal informática y <strong>vandalizar la Wikipedia</strong>. Eso alertará a toda la policía de Tuvalu, momento en el cual deberás robar un coche y escoltar a la banda hasta el nuevo y masivo <strong>Gran Cuartel General de guy.jpg</strong> en el Noreste.
+            </p>
+            <button id="overlay-btn" onclick="startIntroCinematic()">INICIAR OPERACIÓN RETRO</button>
+        </div>
+    </div>
+
+    <div class="controls-tip">
+        [W,A,S,D] Desplazamiento | <strong>[E] o [F] Interactuar con Coche (Subir/Bajar)</strong> | [Espacio] Disparar Láser Táctico
+    </div>
+
+<script>
+    const canvas = document.getElementById("gtaCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const overlay = document.getElementById("screen-overlay");
+    const hudZone = document.getElementById("hud-zone");
+    const hudProgress = document.getElementById("hud-progress");
+    const hudScore = document.getElementById("hud-score");
+    const hudHealth = document.getElementById("hud-health");
+
+    const WORLD_WIDTH = 2600;
+    const WORLD_HEIGHT = 1600;
+    let camera = { x: 0, y: 0 };
+
+    let gameState = 'menu';
+    let gameInterval;
+    let score = 0;
+    let keys = {};
+    let introFrame = 0;
+    let introParticles = [];
+    let missionTimer = 0;
+    
+    let alertBannerText = "";
+    let alertBannerTimer = 0;
+
+    let player, entities, goals, lasers, vehicles, worldHouses, solidWalls;
+    let currentMissionIdx = 0;
+
+    const landmarks = {
+        casaMision1Id: 0, // Índice del Gran Cuartel General de guy.jpg
+        guaridaSuroeste: { x: 320, y: 1350 },
+        mansionFinca: { x: 550, y: 350 },
+        puertoCarga: { x: 2300, y: 1300 },
+        hotelPlaya: { x: 1200, y: 1400 },
+        itGates: { x: 1300, y: 400 }
+    };
+
+    window.addEventListener("keydown", e => {
+        keys[e.key] = true;
+        if(e.key === " ") e.preventDefault();
+
+        let keyLower = e.key.toLowerCase();
+        if ((keyLower === 'e' || keyLower === 'f') && gameState === 'playing') {
+            handleVehicleInteraction();
+        }
+    });
+    window.addEventListener("keyup", e => keys[e.key] = false);
+
+    function buildTuvaluUrbanism() {
+        worldHouses = [];
+        solidWalls = [];
+
+        const housePositions = [
+            // EL GRAN CUARTEL GENERAL DE LA BANDA DE GUY.JPG (Noreste)
+            { x: 1950, y: 100, w: 360, h: 260, color: "#2c3e50", isGuyHQ: true }, 
+            // Casa inicial de sabotaje (Oeste)
+            { x: 550, y: 320, w: 180, h: 135, color: "#F0E68C", isGuyHQ: false },
+            { x: 1250, y: 380, w: 180, h: 135, color: "#AFEEEE", isGuyHQ: false },
+            { x: 1750, y: 850, w: 180, h: 135, color: "#E6E6FA", isGuyHQ: false },
+            { x: 700, y: 1100, w: 180, h: 135, color: "#FFB6C1", isGuyHQ: false },
+            { x: 1150, y: 1350, w: 180, h: 135, color: "#DCDCDC", isGuyHQ: false }
+        ];
+
+        housePositions.forEach((pos, idx) => {
+            let doorWidth = pos.isGuyHQ ? 80 : 60;
+            let house = {
+                id: idx, x: pos.x, y: pos.y, w: pos.w, h: pos.h, color: pos.color, isGuyHQ: pos.isGuyHQ,
+                doorX: pos.x + (pos.w / 2) - (doorWidth / 2),
+                doorY: pos.y + pos.h - 12, doorW: doorWidth, doorH: 16
+            };
+            worldHouses.push(house);
+
+            // Muros físicos sólidos
+            solidWalls.push({ x: pos.x, y: pos.y, w: pos.w, h: 12 });
+            solidWalls.push({ x: pos.x, y: pos.y, w: 12, h: pos.h });
+            solidWalls.push({ x: pos.x + pos.w - 12, y: pos.y, w: 12, h: pos.h });
+            let wing = (pos.w / 2) - (doorWidth / 2);
+            solidWalls.push({ x: pos.x, y: pos.y + pos.h - 12, w: wing, h: 12 });
+            solidWalls.push({ x: pos.x + (pos.w / 2) + (doorWidth / 2), y: pos.y + pos.h - 12, w: wing, h: 12 });
+        });
+    }
+
+    const campaignMissions = [
+        { title: "Misión I (P1). Vandalismo", objective: "Entra a la casa del oeste [🏢] y accede a la terminal para vandalizar la Wikipedia", targetType: "vandalizar_wiki", enemyType: "gente_comun", targetGoal: 1 },
+        { title: "Misión I (P2). Huida al Cuartel", objective: "¡Alerta Policial! Monta en el coche amarillo [E] y conduce a la banda al Gran Cuartel de guy.jpg [🏢] en el Noreste", targetType: "llevar_cuartel", enemyType: "poli", targetGoal: 1 },
+        { title: "Misión II. Sense of humour", objective: "Recluta a 5 humoristas urbanos pacíficos que merodean las veredas", targetType: "humor", enemyType: "gente_comun", targetGoal: 5 },
+        { title: "Misión III. Lovely Sponge", objective: "Usa el coche deportivo [E] e intercepta el cargamento de Bob Esponja", targetType: "bob", enemyType: "poli", targetGoal: 1 },
+        { title: "Misión IV. Writer on edge", objective: "Asalta la finca campestre y rescata al escritor Miguel de Cervantes", targetType: "miguel", enemyType: "mafioso", targetGoal: 1 },
+        { title: "Misión V. Diagnosis Nirvana", objective: "Señala la clínica médica del Sur para extraer a la Dra. Cuddy", targetType: "cuddy", enemyType: "wilson", targetGoal: 1 },
+        { title: "Misión VI. No canon on vicodin", objective: "Confisca los 5 cargamentos de analgésicos custodiados en los muelles", targetType: "vicodin", enemyType: "defensa", targetGoal: 5 },
+        { title: "Misión VII. Chasing Chase", objective: "Dispara repetidamente con auto-apuntado al helicóptero de Robert Chase", targetType: "helicoptero", enemyType: "mafia_aus", targetGoal: 1 },
+        { title: "Misión VIII. Enemy at the Gates", objective: "Busca a Billy Gates en el edificio tecnológico y hackea su salud", targetType: "billy", enemyType: "billy_gates", targetGoal: 1 },
+        { title: "Misión IX. Mr. Teddy Baptista Limo", objective: "Frena e intercepta la limusina blindada de Ted Baptista", targetType: "limu_ted", enemyType: "escolta", targetGoal: 1 },
+        { title: "Misión X. Only one guy Poisoning", objective: "Evade guardias y vierte las toxinas en el refrigerador del hotel", targetType: "nevera", enemyType: "guarda", targetGoal: 1 },
+        { title: "Misión XI. 24 seconds to boom", objective: "¡Cuenta atrás activa! Súbete a un coche y escapa por la compuerta", targetType: "escape", enemyType: "comitiva", targetGoal: 1, timed: true, limit: 24 * 60 },
+        { title: "Misión XII. Awakening of Mr. Norris", objective: "Reúne 8 muestras botánicas de las esquinas para despertar a Chuck Norris", targetType: "porro", enemyType: "innombrable_final", targetGoal: 8 }
+    ];
+
+    function startIntroCinematic() {
+        overlay.classList.add("hidden");
+        gameState = 'intro';
+        introFrame = 0;
+        introParticles = [];
+        buildTuvaluUrbanism();
+        spawnGlobalVehiclesStatic();
+        clearInterval(gameInterval);
+        gameInterval = setInterval(gameLoop, 1000 / 60);
+    }
+
+    function spawnGlobalVehiclesStatic() {
+        vehicles = [];
+        worldHouses.forEach((h, idx) => {
+            vehicles.push({
+                x: h.doorX + 15,
+                y: h.doorY + 60,
+                w: 54, h: 34,
+                color: idx === 0 ? "#ff0055" : (idx === 1 ? "#ffaa00" : "#00cc55"),
+                maxSpeed: 8.5,
+                isDriven: false,
+                id: idx
+            });
+        });
+    }
+
+    function initializeMissionData(idx) {
+        currentMissionIdx = idx;
+        const m = campaignMissions[idx];
+        hudProgress.innerText = `0/${m.targetGoal}`;
+
+        if (idx === 0) {
+            // Empezamos a pie justo abajo de la casa del oeste (House 1)
+            player = { x: 630, y: 510, width: 26, height: 26, speed: 5.2, collected: 0, cooldown: 0, health: 100, insideHouseId: -1, currentVehicle: null };
+            triggerSeamlessAlert("¡Entra por la compuerta azul de la casa y sabotea la Wikipedia!");
+        } else {
+            player.collected = 0;
+        }
+
+        if (m.timed) missionTimer = m.limit;
+
+        entities = [];
+        goals = [];
+        lasers = [];
+
+        if (m.targetType === "vandalizar_wiki") {
+            // Objetivo físico dentro de la casa residencial del oeste
+            goals.push({ x: 610, y: 360, width: 28, height: 28, type: "WIKI", pulse: 0 });
+        } else if (m.targetType === "llevar_cuartel") {
+            // Punto de entrega en las mismísimas compuertas frontales del Gran Cuartel General
+            let h = worldHouses[landmarks.casaMision1Id];
+            goals.push({ x: h.doorX + 15, y: h.doorY + 25, width: 50, height: 40, type: "HQ", pulse: 0 });
+            triggerSeamlessAlert("¡POLICÍA EN CAMINO! Súbete al bólido y huye al Noreste.");
+        } else if (m.targetType === "miguel" || m.targetType === "cuddy") {
+            goals.push({ x: landmarks.mansionFinca.x, y: landmarks.mansionFinca.y, width: 35, height: 35, type: m.targetType, pulse: 0 });
+        } else if (m.targetType === "vicodin") {
+            goals.push({ x: landmarks.puertoCarga.x, y: landmarks.puertoCarga.y, width: 35, height: 35, type: m.targetType, pulse: 0 });
+        } else if (m.targetType === "billy") {
+            goals.push({ x: landmarks.itGates.x, y: landmarks.itGates.y, width: 35, height: 35, type: m.targetType, pulse: 0 });
+        } else if (m.targetType === "nevera") {
+            goals.push({ x: landmarks.hotelPlaya.x, y: landmarks.hotelPlaya.y, width: 35, height: 35, type: m.targetType, pulse: 0 });
+        } else if (m.targetType === "helicoptero") {
+            triggerSeamlessAlert("¡FUEGO DIRECTO CONTRA EL HELICÓPTERO!");
+        } else {
+            spawnNextTargetSeamless(m.targetType);
+        }
+
+        for (let i = 0; i < 3; i++) spawnEnemySeamless("gente_comun");
+        for (let i = 0; i < (m.targetType === "helicoptero" ? 1 : 6); i++) spawnEnemySeamless(m.enemyType);
+    }
+
+    function spawnNextTargetSeamless(type) {
+        goals.push({
+            x: 400 + Math.random() * (WORLD_WIDTH - 800),
+            y: 300 + Math.random() * (WORLD_HEIGHT - 600),
+            width: 32, height: 32, type: type, pulse: 0
+        });
+    }
+
+    function spawnEnemySeamless(type) {
+        let angle = Math.random() * Math.PI * 2;
+        let radius = 450 + Math.random() * 250;
+        let ex = player.x + Math.cos(angle) * radius;
+        let ey = player.y + Math.sin(angle) * radius;
+
+        ex = Math.max(90, Math.min(WORLD_WIDTH - 90, ex));
+        ey = Math.max(90, Math.min(WORLD_HEIGHT - 90, ey));
+
+        entities.push({
+            x: ex, y: ey, width: 28, height: 28,
+            speed: (type === "gente_comun") ? 1.4 : 2.7,
+            type: type, vx: -1 + Math.random() * 2, vy: -1 + Math.random() * 2
+        });
+    }
+
+    function handleVehicleInteraction() {
+        if (player.currentVehicle) {
+            let car = player.currentVehicle;
+            car.isDriven = false;
+            player.x = car.x - 35;
+            player.y = car.y;
+            player.currentVehicle = null;
+            player.width = 26; player.height = 26;
+            player.speed = 5.2;
+            triggerSeamlessAlert("Bajaste del vehículo.");
+        } else {
+            let nearestCar = null;
+            let minDist = 75;
+
+            vehicles.forEach(v => {
+                let pCenterX = player.x + player.width / 2;
+                let pCenterY = player.y + player.height / 2;
+                let cCenterX = v.x + v.w / 2;
+                let cCenterY = v.y + v.h / 2;
+                let d = Math.sqrt(Math.pow(pCenterX - cCenterX, 2) + Math.pow(pCenterY - cCenterY, 2));
+                if (d < minDist) {
+                    nearestCar = v;
+                    minDist = d;
+                }
+            });
+
+            if (nearestCar) {
+                player.currentVehicle = nearestCar;
+                nearestCar.isDriven = true;
+                player.width = nearestCar.w;
+                player.height = nearestCar.h;
+                player.speed = nearestCar.maxSpeed;
+                player.x = nearestCar.x;
+                player.y = nearestCar.y;
+                triggerSeamlessAlert("¡Motor encendido! Escapa hacia el Cuartel General.");
+            }
+        }
+    }
+
+    function triggerSeamlessAlert(text) {
+        alertBannerText = text;
+        alertBannerTimer = 130;
+    }
+
+    function gameLoop() {
+        if (gameState === 'intro') renderIntro();
+        else if (gameState === 'playing') updateAndRenderGameplay();
+    }
+
+    function renderIntro() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+
+        if (introFrame > 65 && introFrame < 140) {
+            ctx.translate(-4 + Math.random() * 8, -4 + Math.random() * 8);
+        }
+
+        ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "#fff";
+        for(let i=0; i<30; i++) ctx.fillRect((i * 89) % canvas.width, (i * 53) % canvas.height, 2, 2);
+
+        let wx = 140, wy = 160;
+        ctx.fillStyle = "#444"; ctx.beginPath(); ctx.arc(wx, wy, 55, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(wx + 15, wy - 15, 15, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#fff"; ctx.font = "bold 20px Arial"; ctx.fillText("W", wx - 9, wy + 7);
+
+        let t1Y = 170, t2Y = 170;
+        if (introFrame > 105) { 
+            t1Y += (introFrame - 105) * 4.2; 
+            t2Y += (introFrame - 105) * 4.6; 
+        }
+
+        ctx.fillStyle = "#8ba0b0"; 
+        if (t1Y < canvas.height) {
+            ctx.fillRect(510, t1Y, 42, canvas.height - t1Y);
+        }
+
+        ctx.fillStyle = "#697d8c"; 
+        if (t2Y < canvas.height) {
+            ctx.fillRect(590, t2Y, 42, canvas.height - t2Y);
+        }
+
+        if (introFrame > 35 && introFrame < 107) {
+            ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 14;
+            ctx.beginPath(); ctx.moveTo(wx + 15, wy - 15); ctx.lineTo(530, 210); ctx.lineTo(610, 210); ctx.stroke();
+            ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 6; ctx.stroke();
+        }
+
+        introParticles.forEach((p, pIdx) => {
+            ctx.fillStyle = p.color + p.alpha + ")";
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+            p.r += 0.4; p.alpha -= 0.015;
+            if (p.alpha <= 0) introParticles.splice(pIdx, 1);
+        });
+
+        ctx.restore();
+
+        ctx.fillStyle = "#fff"; ctx.font = "14px 'Courier New'"; ctx.textAlign = "center";
+        if (introFrame < 65) ctx.fillText("CONECTANDO MODEM RETRO...", canvas.width/2, 420);
+        else if (introFrame < 115) { ctx.fillStyle = "#ff0055"; ctx.fillText("💥 IMPACTO: Torres destruidas del mapa anterior.", canvas.width/2, 420); }
+        else { ctx.fillStyle = "#00ffff"; ctx.fillText("¡Preparado! Ve a la terminal y cambia la Wikipedia...", canvas.width/2, 420); }
+
+        introFrame++;
+        if (introFrame > 200) {
+            gameState = 'playing';
+            initializeMissionData(0);
+        }
+    }
+
+    function updateAndRenderGameplay() {
+        const m = campaignMissions[currentMissionIdx];
+
+        if (m.timed) {
+            missionTimer--;
+            if (missionTimer <= 0) {
+                triggerWastedScreen("TIEMPO AGOTADO", "El operativo colapsó por retraso.");
+                return;
+            }
+        }
+
+        let prevX = player.x; let prevY = player.y;
+        let moveX = 0; let moveY = 0;
+
+        if (keys["ArrowUp"] || keys["w"] || keys["W"]) moveY -= player.speed;
+        if (keys["ArrowDown"] || keys["s"] || keys["S"]) moveY += player.speed;
+        if (keys["ArrowLeft"] || keys["a"] || keys["A"]) moveX -= player.speed;
+        if (keys["ArrowRight"] || keys["d"] || keys["D"]) moveX += player.speed;
+
+        player.x += moveX;
+        if (checkWallCollisions(player)) player.x = prevX;
+
+        player.y += moveY;
+        if (checkWallCollisions(player)) player.y = prevY;
+
+        player.x = Math.max(45, Math.min(WORLD_WIDTH - 45, player.x));
+        player.y = Math.max(45, Math.min(WORLD_HEIGHT - 45, player.y));
+
+        if (player.currentVehicle) {
+            player.currentVehicle.x = player.x;
+            player.currentVehicle.y = player.y;
+        }
+
+        player.insideHouseId = -1;
+        if (!player.currentVehicle) {
+            worldHouses.forEach(h => {
+                if (player.x + player.width/2 >= h.x && player.x + player.width/2 <= h.x + h.w &&
+                    player.y + player.height/2 >= h.y && player.y + player.height/2 <= h.y + h.h) {
+                    player.insideHouseId = h.id;
+                }
+            });
+        }
+
+        camera.x = Math.max(0, Math.min(WORLD_WIDTH - canvas.width, player.x - canvas.width / 2));
+        camera.y = Math.max(0, Math.min(WORLD_HEIGHT - canvas.height, player.y - canvas.height / 2));
+
+        if (keys[" "] && player.cooldown <= 0) {
+            let nearestHostile = null; let minDist = Infinity;
+            entities.forEach(enemy => {
+                if (enemy.type !== "gente_comun") {
+                    let d = Math.sqrt(Math.pow(enemy.x - player.x, 2) + Math.pow(enemy.y - player.y, 2));
+                    if (d < minDist) { minDist = d; nearestHostile = enemy; }
+                }
+            });
+
+            let attackAngle = 0;
+            if (nearestHostile) attackAngle = Math.atan2(nearestHostile.y - player.y, nearestHostile.x - player.x);
+
+            lasers.push({
+                x: player.x + player.width / 2, y: player.y + player.height / 2,
+                vx: Math.cos(attackAngle) * 15, vy: Math.sin(attackAngle) * 15, size: 6
+            });
+            player.cooldown = 14;
+        }
+        if (player.cooldown > 0) player.cooldown--;
+
+        lasers.forEach((laser, lIdx) => {
+            laser.x += laser.vx; laser.y += laser.vy;
+            if (laser.x < 0 || laser.x > WORLD_WIDTH || laser.y < 0 || laser.y > WORLD_HEIGHT) lasers.splice(lIdx, 1);
+        });
+
+        entities.forEach((enemy, eIdx) => {
+            let distToPlayer = Math.sqrt(Math.pow(player.x - enemy.x, 2) + Math.pow(player.y - enemy.y, 2));
+            let isEnemyHostile = (enemy.type !== "gente_comun");
+
+            let enemyMoveX = 0; let enemyMoveY = 0;
+
+            if (isEnemyHostile && distToPlayer < 500 && player.insideHouseId === -1) {
+                let rad = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                enemyMoveX = Math.cos(rad) * enemy.speed;
+                enemyMoveY = Math.sin(rad) * enemy.speed;
+            } else {
+                enemyMoveX = enemy.vx * enemy.speed; enemyMoveY = enemy.vy * enemy.speed;
+                if (Math.random() < 0.018) {
+                    enemy.vx = -1 + Math.random() * 2; enemy.vy = -1 + Math.random() * 2;
+                }
+            }
+
+            let exPrev = enemy.x; let eyPrev = enemy.y;
+            enemy.x += enemyMoveX; enemy.y += enemyMoveY;
+
+            if (checkEnemyHouseBlock(enemy)) {
+                enemy.x = exPrev; enemy.y = eyPrev;
+                enemy.vx *= -1; enemy.vy *= -1;
+            }
+
+            lasers.forEach((laser, lIdx) => {
+                let boxL = { x: laser.x, y: laser.y, width: laser.size, height: laser.size };
+                if (checkCollision(boxL, enemy)) {
+                    lasers.splice(lIdx, 1);
+
+                    if (enemy.type === "helicoptero" || enemy.type === "billy_gates") {
+                        player.collected = 1; hudProgress.innerText = "1/1";
+                        advanceMissionSeamless();
+                        return;
+                    }
+
+                    entities.splice(eIdx, 1);
+                    score += 50; hudScore.innerText = score;
+                    spawnEnemySeamless(enemy.type);
+                }
+            });
+
+            if (checkCollision(player, enemy)) {
+                if (isEnemyHostile) {
+                    player.health -= 12;
+                    hudHealth.innerText = player.health + "%";
+                    enemy.x += (enemy.x > player.x ? 120 : -120);
+
+                    if (player.health <= 0) {
+                        triggerWastedScreen("HAS SIDO ELIMINADO", "La policía frustró tus planes.");
+                        return;
+                    }
+                } else {
+                    enemy.vx *= -1; enemy.vy *= -1;
+                }
+            }
+        });
+
+        goals.forEach((goal, gIdx) => {
+            goal.pulse += 0.1;
+            if (checkCollision(player, goal)) {
+                goals.splice(gIdx, 1);
+                player.collected++;
+                score += 300; hudScore.innerText = score;
+                hudProgress.innerText = `${player.collected}/${m.targetGoal}`;
+
+                if (player.collected >= m.targetGoal) {
+                    if (m.targetType === "vandalizar_wiki") {
+                        triggerSeamlessAlert("¡WIKIPEDIA VANDALIZADA CON ÉXITO! Escapa al Cuartel.");
+                    } else {
+                        triggerSeamlessAlert("¡BANDA EN EL CUARTEL GENERAL! Zona segura establecida.");
+                    }
+                    advanceMissionSeamless();
+                } else {
+                    spawnNextTargetSeamless(m.targetType);
+                }
+            }
+        });
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(-camera.x, -camera.y);
+
+        ctx.fillStyle = "#F4EBD0"; ctx.fillRect(60, 60, WORLD_WIDTH - 120, WORLD_HEIGHT - 120);
+
+        ctx.fillStyle = "#666666";
+        ctx.fillRect(160, 160, 130, WORLD_HEIGHT - 320);
+        ctx.fillRect(WORLD_WIDTH - 290, 160, 130, WORLD_HEIGHT - 320);
+        ctx.fillRect(160, WORLD_HEIGHT / 2 - 50, WORLD_WIDTH - 320, 100);
+
+        // RENDERIZACIÓN DE MAPA URBANO
+        worldHouses.forEach(h => {
+            if (player.insideHouseId === h.id) {
+                ctx.fillStyle = h.isGuyHQ ? "#112233" : "#1e272e"; 
+                ctx.fillRect(h.x, h.y, h.w, h.h);
+                
+                // Si es la casa del sabotaje, pintamos una mesa con ordenadores interactivos
+                if (h.id === 1) {
+                    ctx.fillStyle = "#4b7bec"; ctx.fillRect(h.x + 40, h.y + 30, 45, 20); // Escritorio
+                    ctx.fillStyle = "#ffffff"; ctx.font = "bold 9px monospace";
+                    ctx.fillText("WIKI-TERM", h.x + 42, h.y + 25);
+                }
+                
+                ctx.fillStyle = "#445566";
+                ctx.fillRect(h.x + h.w/2 - 6, h.y + 20, 12, h.h - 90);
+            } else {
+                ctx.fillStyle = h.color; ctx.fillRect(h.x, h.y, h.w, h.h);
+                
+                if (h.isGuyHQ) {
+                    ctx.fillStyle = "#1a252f"; 
+                    ctx.fillRect(h.x + 15, h.y + 15, h.w - 30, h.h - 50); 
+                    
+                    ctx.fillStyle = "#00ffff";
+                    for(let wx = h.x + 30; wx < h.x + h.w - 40; wx += 50) {
+                        ctx.fillRect(wx, h.y + 35, 25, 35);
+                        ctx.fillRect(wx, h.y + 95, 25, 35);
+                    }
+                    
+                    ctx.fillStyle = "#ff0055"; ctx.fillRect(h.x + 20, h.y + 160, h.w - 40, 24);
+                    ctx.fillStyle = "#fff"; ctx.font = "bold 11px monospace"; ctx.textAlign = "center";
+                    ctx.fillText("GUY.JPG GANG HEADQUARTERS", h.x + h.w/2, h.y + 176);
+                } else {
+                    ctx.fillStyle = "#A0522D";
+                    ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(h.x + h.w/2, h.y + h.h/2); ctx.lineTo(h.x + h.w, h.y); ctx.fill();
+                }
+            }
+            ctx.strokeStyle = h.isGuyHQ ? "#00ffff" : "#ff0055"; 
+            ctx.lineWidth = 4; ctx.strokeRect(h.x, h.y, h.w, h.h);
+            
+            ctx.fillStyle = h.isGuyHQ ? "#ff0055" : "#00ffff"; 
+            ctx.fillRect(h.doorX, h.doorY, h.doorW, 6);
+        });
+
+        vehicles.forEach(v => {
+            if (!v.isDriven) {
+                ctx.fillStyle = v.color; ctx.fillRect(v.x, v.y, v.w, v.h);
+                ctx.fillStyle = "#111";
+                ctx.fillRect(v.x + 6, v.y - 3, 10, 3); ctx.fillRect(v.x + v.w - 16, v.y - 3, 10, 3);
+                ctx.fillRect(v.x + 6, v.y + v.h, 10, 3); ctx.fillRect(v.x + v.w - 16, v.y + v.h, 10, 3);
+                
+                let pCenterX = player.x + player.width / 2;
+                let pCenterY = player.y + player.height / 2;
+                let cCenterX = v.x + v.w / 2;
+                let cCenterY = v.y + v.h / 2;
+                let dist = Math.sqrt(Math.pow(pCenterX - cCenterX, 2) + Math.pow(pCenterY - cCenterY, 2));
+                if (dist < 75 && !player.currentVehicle) {
+                    ctx.fillStyle = "#00ffff"; ctx.font = "bold 11px Arial"; ctx.textAlign = "center";
+                    ctx.fillText("[E] SUBIRSE", v.x + v.w/2, v.y - 10);
+                }
+            }
+        });
+
+        goals.forEach(goal => {
+            ctx.fillStyle = "#ff0055"; ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
+            ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2; ctx.strokeRect(goal.x, goal.y, goal.width, goal.height);
+            ctx.fillStyle = "#fff"; ctx.font = "bold 9px monospace"; ctx.textAlign = "center";
+            ctx.fillText(goal.type.toUpperCase(), goal.x + goal.width/2, goal.y + goal.height/2 + 4);
+        });
+
+        lasers.forEach(laser => {
+            ctx.fillStyle = "#00ffff"; ctx.fillRect(laser.x, laser.y, laser.size, laser.size);
+        });
+
+        entities.forEach(enemy => {
+            if (enemy.type === "gente_comun") {
+                ctx.fillStyle = "#fbd2a6"; ctx.fillRect(enemy.x + 5, enemy.y, 16, 8);
+                ctx.fillStyle = "#ff5500"; ctx.fillRect(enemy.x, enemy.y + 8, enemy.width, 10);
+                ctx.fillStyle = "#00ffcc"; ctx.fillRect(enemy.x + 3, enemy.y + 18, enemy.width - 6, 8);
+            } else if (enemy.type === "poli") {
+                ctx.fillStyle = "#111111";
+                ctx.fillRect(enemy.x + 3, enemy.y - 3, 8, 3); ctx.fillRect(enemy.x + enemy.width - 11, enemy.y - 3, 8, 3);
+                ctx.fillRect(enemy.x + 3, enemy.y + enemy.height, 8, 3); ctx.fillRect(enemy.x + enemy.width - 11, enemy.y + enemy.height, 8, 3);
+
+                ctx.fillStyle = "#ffffff"; ctx.fillRect(enemy.x, enemy.y + 1, enemy.width, enemy.height - 2);
+                ctx.fillStyle = "#0044ff"; ctx.fillRect(enemy.x + 10, enemy.y + 1, enemy.width - 20, enemy.height - 2);
+
+                let toggleLight = Math.floor(Date.now() / 80) % 2 === 0;
+                ctx.fillStyle = toggleLight ? "#ff0033" : "#0055ff";
+                ctx.fillRect(enemy.x + 14, enemy.y + 3, 5, enemy.height - 6);
+            } else {
+                ctx.fillStyle = "#fbd2a6"; ctx.fillRect(enemy.x + 5, enemy.y, 16, 8);
+                ctx.fillStyle = "#1c1c1c"; ctx.fillRect(enemy.x, enemy.y + 8, enemy.width, 11);
+                ctx.fillStyle = "#111111"; ctx.fillRect(enemy.x + 3, enemy.y + 19, enemy.width - 6, 7);
+            }
+        });
+
+        if (player.currentVehicle) {
+            let v = player.currentVehicle;
+            ctx.fillStyle = v.color; ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.fillStyle = "#000"; ctx.fillRect(player.x + 10, player.y + 4, 12, player.height - 8);
+            ctx.fillRect(player.x + 35, player.y + 4, 10, player.height - 8);
+            ctx.fillStyle = "#ffff00"; ctx.fillRect(player.x + player.width - 4, player.y + 4, 4, 6);
+        } else {
+            ctx.fillStyle = "#00f0ff"; ctx.fillRect(player.x, player.y + 7, player.width, 11);
+            ctx.fillStyle = "#2d4b82"; ctx.fillRect(player.x + 2, player.y + 18, player.width - 4, 8);
+            ctx.fillStyle = "#fbd2a6"; ctx.fillRect(player.x + 5, player.y, 16, 8);
+        }
+
+        ctx.restore();
+
+        if (alertBannerTimer > 0) {
+            ctx.fillStyle = "rgba(255, 0, 85, 0.95)"; ctx.fillRect(0, 175, canvas.width, 38);
+            ctx.fillStyle = "#fff"; ctx.font = "bold 13px monospace"; ctx.textAlign = "center";
+            ctx.fillText(alertBannerText, canvas.width / 2, 198);
+            alertBannerTimer--;
+        }
+
+        ctx.fillStyle = "rgba(4, 1, 6, 0.94)"; ctx.strokeStyle = "#ff0055"; ctx.lineWidth = 2;
+        ctx.fillRect(15, 15, 450, 80); ctx.strokeRect(15, 15, 450, 80);
+        
+        ctx.fillStyle = "#00ffff"; ctx.font = "bold 11px monospace"; ctx.textAlign = "left";
+        ctx.fillText(`CÉLULA CRIMINAL: ${m.title.toUpperCase()}`, 25, 33);
+        
+        ctx.fillStyle = "#fff"; ctx.font = "12px Arial";
+        ctx.fillText(m.objective, 25, 53);
+        
+        ctx.fillStyle = "#aaa"; ctx.font = "10px monospace";
+        let drivingStatus = player.currentVehicle ? "DENTRO DEL COCHE [E para bajarse]" : "A PIE [Usa E para tomar un coche urbano]";
+        ctx.fillText(`SITUACIÓN: ${drivingStatus}`, 25, 73);
+
+        // RADAR DE SEGUIMIENTO EN TIEMPO REAL
+        let rx = 20, ry = canvas.height - 140, rw = 120, rh = 120;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.85)"; ctx.fillRect(rx, ry, rw, rh);
+        ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 2; ctx.strokeRect(rx, ry, rw, rh);
+
+        let prx = rx + (player.x / WORLD_WIDTH) * rw;
+        let pry = ry + (player.y / WORLD_HEIGHT) * rh;
+        ctx.fillStyle = "#00ffff"; ctx.beginPath(); ctx.arc(prx, pry, 3.5, 0, Math.PI*2); ctx.fill();
+
+        let targetRadarX = 0, targetRadarY = 0;
+        if (m.targetType === "vandalizar_wiki") {
+            let targetH = worldHouses[1]; // La casa de inicio
+            targetRadarX = rx + ((targetH.x + targetH.w/2) / WORLD_WIDTH) * rw;
+            targetRadarY = ry + ((targetH.y + targetH.h/2) / WORLD_HEIGHT) * rh;
+        } else if (m.targetType === "llevar_cuartel") {
+            let targetH = worldHouses[landmarks.casaMision1Id]; // El Cuartel
+            targetRadarX = rx + ((targetH.doorX) / WORLD_WIDTH) * rw;
+            targetRadarY = ry + ((targetH.doorY) / WORLD_HEIGHT) * rh;
+        } else if (m.targetType === "miguel" || m.targetType === "cuddy") {
+             targetRadarX = rx + (landmarks.mansionFinca.x / WORLD_WIDTH) * rw;
+             targetRadarY = ry + (landmarks.mansionFinca.y / WORLD_HEIGHT) * rh;
+        } else if (m.targetType === "billy") {
+             targetRadarX = rx + (landmarks.itGates.x / WORLD_WIDTH) * rw;
+             targetRadarY = ry + (landmarks.itGates.y / WORLD_HEIGHT) * rh;
+        } else if (m.targetType === "vicodin") {
+             targetRadarX = rx + (landmarks.puertoCarga.x / WORLD_WIDTH) * rw;
+             targetRadarY = ry + (landmarks.puertoCarga.y / WORLD_HEIGHT) * rh;
+        } else if (goals.length > 0) {
+            targetRadarX = rx + (goals[0].x / WORLD_WIDTH) * rw;
+            targetRadarY = ry + (goals[0].y / WORLD_HEIGHT) * rh;
+        }
+
+        if (targetRadarX > 0) {
+            ctx.fillStyle = (Math.floor(Date.now() / 180) % 2 === 0) ? "#ff0055" : "#ffffff";
+            ctx.beginPath(); ctx.arc(targetRadarX, targetRadarY, 5, 0, Math.PI*2); ctx.fill();
+        }
+    }
+
+    function checkWallCollisions(rect) {
+        for (let i = 0; i < solidWalls.length; i++) {
+            let w = solidWalls[i];
+            if (rect.x < w.x + w.w && rect.x + rect.width > w.x &&
+                rect.y < w.y + w.h && rect.y + rect.height > w.y) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function checkEnemyHouseBlock(enemy) {
+        for (let i = 0; i < worldHouses.length; i++) {
+            let h = worldHouses[i];
+            if (enemy.x < h.x + h.w && enemy.x + enemy.width > h.x &&
+                enemy.y < h.y + h.h && enemy.y + enemy.height > h.y) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function checkCollision(r1, r2) {
+        return r1.x < r2.x + r2.width && r1.x + r1.width > r2.x &&
+               r1.y < r2.y + r2.height && r1.y + r1.height > r2.y;
+    }
+
+    function advanceMissionSeamless() {
+        let nextIdx = currentMissionIdx + 1;
+        if (nextIdx < campaignMissions.length) {
+            initializeMissionData(nextIdx);
+        } else {
+            gameState = 'menu';
+            overlay.classList.remove("hidden");
+            document.getElementById("overlay-title").innerText = "¡IMPERIO TOTAL LOGRADO!";
+            document.getElementById("overlay-btn").innerText = "VOLVER A JUGAR DESDE LA INTRO";
+            document.getElementById("overlay-btn").onclick = () => startIntroCinematic();
+        }
+    }
+
+    function triggerWastedScreen(title, msg) {
+        gameState = 'menu';
+        if (player.currentVehicle) {
+            player.currentVehicle.isDriven = false;
+            player.currentVehicle = null;
+        }
+        clearInterval(gameInterval);
+        overlay.classList.remove("hidden");
+        document.getElementById("overlay-title").innerText = title;
+        document.getElementById("overlay-btn").innerText = "REINTENTAR FASE";
+        document.getElementById("overlay-btn").onclick = () => {
+            overlay.classList.add("hidden");
+            gameState = 'playing';
+            initializeMissionData(currentMissionIdx);
+            clearInterval(gameInterval);
+            gameInterval = setInterval(gameLoop, 1000 / 60);
+        };
+    }
+</script>
+</body>
+</html>
