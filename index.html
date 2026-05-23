@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grand-Theft-Auto-Tio1.jpg-Stories: Custom Island Engine</title>
+    <style>
+        body {
+            background-color: #2b5c8f;
+            color: #000;
+            font-family: 'Impact', 'Arial Black', sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 10px;
+            user-select: none;
+        }
+        h1 {
+            color: #ff0055;
+            text-shadow: 2px 2px #E7D6A8, -1px -1px #000;
+            font-size: 30px;
+            margin: 3px 0;
+        }
+        .subtitle {
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            margin-bottom: 6px;
+        }
+        #game-frame {
+            position: relative;
+            display: inline-block;
+            border: 5px solid #ff0055;
+            background-color: #000;
+            box-shadow: 0 0 35px #ff0055;
+        }
+        .hud {
+            display: flex;
+            justify-content: space-between;
+            background: linear-gradient(90deg, #ff0055, #E7D6A8);
+            color: #fff;
+            padding: 5px 15px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 13px;
+            text-shadow: 1px 1px #000;
+        }
+        canvas {
+            display: block;
+            background: #3a7bd5; /* Mar abierto envolvente */
+        }
+        .overlay {
+            position: absolute;
+            top: 32px;
+            left: 0;
+            width: 800px;
+            height: 450px;
+            background: rgba(12, 20, 32, 0.97);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+        .overlay h2 {
+            color: #00ffff;
+            font-size: 25px;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px #ff0055;
+        }
+        button {
+            background: #ff0055;
+            color: #fff;
+            border: 3px solid #E7D6A8;
+            padding: 12px 30px;
+            font-size: 20px;
+            font-family: 'Impact', sans-serif;
+            cursor: pointer;
+            text-shadow: 1px 1px #000;
+        }
+        button:hover {
+            background: #00ffff;
+            color: #000;
+            box-shadow: 0 0 15px #ff0055;
+        }
+        .hidden { display: none !important; }
+        .controls-tip {
+            margin-top: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Grand-Theft-Auto-Tio1.jpg-Stories</h1>
+    <div class="subtitle">Custom Coastlines, Radar Urbanism & Real Scale Police Fleet</div>
+
+    <div id="game-frame">
+        <div class="hud">
+            <div>ISLA: <span id="hud-zone">Tuvalu Coastlines</span></div>
+            <div>SALUD: <span id="hud-health" style="color: #00ff00;">100%</span></div>
+            <div>PROGRESO: <span id="hud-progress">0/0</span></div>
+            <div>SCORE: <span id="hud-score">0</span></div>
+        </div>
+
+        <canvas id="gtaCanvas" width="800" height="450"></canvas>
+
+        <div id="screen-overlay" class="overlay">
+            <h2 id="overlay-title">MISIÓN I: EL GRAN ROBO DE WIKIPEDIA</h2>
+            <p style="max-width:650px; text-align:justify; font-size:12px; color:#ccc; line-height:1.4;">
+                Entra en la casa del oeste para <strong>vandalizar la Wikipedia 5 veces</strong>. Tras el sabotaje informático, la policía desplegará patrullas de tamaño completo por las carreteras orgánicas de la isla. Evádelas usando el bólido y refúgiate en el colosal <strong>Gran Cuartel General de guy.jpg</strong> en el Noreste.
+            </p>
+            <button id="overlay-btn" onclick="startIntroCinematic()">INICIAR CON CAÑÓN ORBITAL</button>
+        </div>
+    </div>
+
+    <div class="controls-tip">
+        [W,A,S,D] Conducir/Moverse | <strong>[E] o [F] Interactuar (Coches, Puertas de Casas)</strong> | [Espacio] Láser Táctico
+    </div>
+
+<script>
+    const canvas = document.getElementById("gtaCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const overlay = document.getElementById("screen-overlay");
+    const hudProgress = document.getElementById("hud-progress");
+    const hudScore = document.getElementById("hud-score");
+    const hudHealth = document.getElementById("hud-health");
+
+    const WORLD_WIDTH = 2600;
+    const WORLD_HEIGHT = 1600;
+    let camera = { x: 0, y: 0 };
+
+    let gameState = 'menu';
+    let gameInterval;
+    let score = 0;
+    let keys = {};
+    let introFrame = 0;
+    let introParticles = [];
+    let missionTimer = 0;
+    
+    let alertBannerText = "";
+    let alertBannerTimer = 0;
+
+    let player, entities, goals, lasers, vehicles, worldHouses, solidWalls, islandCoastline;
+    let currentMissionIdx = 0;
+
+    const landmarks = {
+        cuartelGeneralId: 0,
+        casaWikipediaId: 1,
+        mansionFincaId: 2,
+        puertoCargaX: 2100,
+        puertoCargaY: 1300
+    };
+
+    window.addEventListener("keydown", e => {
+        keys[e.key] = true;
+        if(e.key === " ") e.preventDefault();
+        let keyLower = e.key.toLowerCase();
+        if ((keyLower === 'e' || keyLower === 'f') && gameState === 'playing') {
+            handleInteraction();
+        }
+    });
+    window.addEventListener("keyup", e => keys[e.key] = false);
+
+    function buildOrganicIsland() {
+        worldHouses = [];
+        solidWalls = [];
+        islandCoastline = [];
+
+        // Generación de costa irregular no cuadrada (Bahías y entrantes)
+        let numPoints = 60;
+        let centerX = WORLD_WIDTH / 2;
+        let centerY = WORLD_HEIGHT / 2;
+        for (let i = 0; i < numPoints; i++) {
+            let angle = (i / numPoints) * Math.PI * 2;
+            let baseRadX = WORLD_WIDTH * 0.42;
+            let baseRadY = WORLD_HEIGHT * 0.42;
+            
+            // Deformaciones artificiales para romper el cuadrado
+            if (angle > 0.3 && angle < 1.2) { baseRadX *= 0.75; baseRadY *= 0.7; } // Bahía norte
+            if (angle > 3.5 && angle < 4.8) { baseRadX *= 0.8; baseRadY *= 0.85; } // Bahía sur
+            
+            let noiseX = Math.sin(angle * 6) * 45;
+            let noiseY = Math.cos(angle * 8) * 35;
+            
+            islandCoastline.push({
+                x: centerX + Math.cos(angle) * baseRadX + noiseX,
+                y: centerY + Math.sin(angle) * baseRadY + noiseY
+            });
+        }
+
+        const housePositions = [
+            { x: 1950, y: 160, w: 360, h: 260, color: "#2c3e50", isGuyHQ: true, name: "CUARTEL" }, 
+            { x: 500, y: 550, w: 180, h: 135, color: "#F0E68C", isGuyHQ: false, name: "CASA WIKI" },
+            { x: 1100, y: 250, w: 220, h: 160, color: "#8B4513", isGuyHQ: false, name: "FINCA CERVANTES" },
+            { x: 1750, y: 850, w: 180, h: 135, color: "#E6E6FA", isGuyHQ: false, name: "URB" },
+            { x: 650, y: 1150, w: 180, h: 135, color: "#FFB6C1", isGuyHQ: false, name: "URB" },
+            { x: 1250, y: 1250, w: 180, h: 135, color: "#DCDCDC", isGuyHQ: false, name: "URB" }
+        ];
+
+        housePositions.forEach((pos, idx) => {
+            let doorWidth = pos.isGuyHQ ? 80 : 50;
+            let house = {
+                id: idx, x: pos.x, y: pos.y, w: pos.w, h: pos.h, color: pos.color, isGuyHQ: pos.isGuyHQ, name: pos.name,
+                doorX: pos.x + (pos.w / 2) - (doorWidth / 2),
+                doorY: pos.y + pos.h - 10, doorW: doorWidth, doorH: 14
+            };
+            worldHouses.push(house);
+
+            solidWalls.push({ x: pos.x, y: pos.y, w: pos.w, h: 12 });
+            solidWalls.push({ x: pos.x, y: pos.y, w: 12, h: pos.h });
+            solidWalls.push({ x: pos.x + pos.w - 12, y: pos.y, w: 12, h: pos.h });
+            let wing = (pos.w / 2) - (doorWidth / 2);
+            solidWalls.push({ x: pos.x, y: pos.y + pos.h - 12, w: wing, h: 12 });
+            solidWalls.push({ x: pos.x + (pos.w / 2) + (doorWidth / 2), y: pos.y + pos.h - 12, w: wing, h: 12 });
+        });
+    }
+
+    const campaignMissions = [
+        { title: "Misión I (P1). Wikipedia Hack", objective: "Infíltrate en la casa del Oeste [E] y altera la Wikipedia 5 veces en los ordenadores", targetType: "vandalizar_wiki", enemyType: "gente_comun", targetGoal: 5 },
+        { title: "Misión I (P2). Escape al Cuartel", objective: "¡Alarma Máxima! Sube al coche rápido y llega a las puertas del Gran Cuartel [🏢]", targetType: "llevar_cuartel", enemyType: "poli", targetGoal: 1 },
+        { title: "Misión II. Sense of humour", objective: "Recluta a 5 humoristas urbanos pacíficos que merodean las veredas", targetType: "humor", enemyType: "gente_comun", targetGoal: 5 },
+        { title: "Misión III. Lovely Sponge", objective: "Intercepta el cargamento ilegal de Bob Esponja en las autopistas", targetType: "bob", enemyType: "poli", targetGoal: 1 },
+        { title: "Misión IV. Writer on edge", objective: "Entra en la Finca rústica del Norte y rescata a Miguel de Cervantes de los mafiosos", targetType: "miguel", enemyType: "mafioso", targetGoal: 1 },
+        { title: "Misión V. Diagnosis Nirvana", objective: "Asalta la clínica del Sur para extraer a la Dra. Cuddy", targetType: "cuddy", enemyType: "wilson", targetGoal: 1 }
+    ];
+
+    function startIntroCinematic() {
+        overlay.classList.add("hidden");
+        gameState = 'intro';
+        introFrame = 0;
+        introParticles = [];
+        buildOrganicIsland();
+        spawnVehicles();
+        clearInterval(gameInterval);
+        gameInterval = setInterval(gameLoop, 1000 / 60);
+    }
+
+    function spawnVehicles() {
+        vehicles = [];
+        worldHouses.forEach((h, idx) => {
+            vehicles.push({
+                x: h.doorX + 10, y: h.doorY + 50, w: 54, h: 32, // Escala de coche normal estándar
+                color: idx === 0 ? "#ff0055" : (idx === 1 ? "#ffaa00" : "#00aa55"),
+                maxSpeed: 8.5, isDriven: false, id: idx
+            });
+        });
+    }
+
+    function initializeMissionData(idx) {
+        currentMissionIdx = idx;
+        const m = campaignMissions[idx];
+        hudProgress.innerText = `0/${m.targetGoal}`;
+
+        if (idx === 0) {
+            player = { x: 570, y: 720, width: 24, height: 24, speed: 5.0, collected: 0, cooldown: 0, health: 100, insideHouseId: -1, currentVehicle: null };
+            triggerSeamlessAlert("¡Dirígete a la casa amarilla y pulsa [E] en la puerta!");
+        } else {
+            player.collected = 0;
+        }
+
+        entities = []; goals = []; lasers = [];
+
+        if (m.targetType === "vandalizar_wiki") {
+            let targetH = worldHouses[landmarks.casaWikipediaId];
+            for (let i = 0; i < m.targetGoal; i++) {
+                goals.push({ x: targetH.x + 30 + (i * 28), y: targetH.y + 45, width: 16, height: 16, type: "WIKI" });
+            }
+        } else if (m.targetType === "llevar_cuartel") {
+            let h = worldHouses[landmarks.cuartelGeneralId];
+            goals.push({ x: h.doorX + 15, y: h.doorY + 20, width: 50, height: 45, type: "HQ" });
+        } else if (m.targetType === "miguel") {
+            // Cervantes espera pacientemente DENTRO de su casa asignada
+            let h = worldHouses[landmarks.mansionFincaId];
+            goals.push({ x: h.x + h.w/2 - 10, y: h.y + 50, width: 24, height: 24, type: "MIGUEL" });
+            triggerSeamlessAlert("¡Ve a la Finca del Norte, entra y busca a Cervantes!");
+        } else {
+            spawnNextTargetSeamless(m.targetType);
+        }
+
+        for (let i = 0; i < 4; i++) spawnEnemySeamless("gente_comun");
+        for (let i = 0; i < (m.targetType === "llevar_cuartel" ? 6 : 3); i++) spawnEnemySeamless(m.enemyType);
+    }
+
+    function spawnNextTargetSeamless(type) {
+        goals.push({
+            x: 600 + Math.random() * 1200, y: 400 + Math.random() * 800,
+            width: 30, height: 30, type: type
+        });
+    }
+
+    function spawnEnemySeamless(type) {
+        let angle = Math.random() * Math.PI * 2;
+        let radius = 400 + Math.random() * 300;
+        let ex = Math.max(150, Math.min(WORLD_WIDTH - 150, player.x + Math.cos(angle) * radius));
+        let ey = Math.max(150, Math.min(WORLD_HEIGHT - 150, player.y + Math.sin(angle) * radius));
+
+        entities.push({
+            x: ex, y: ey,
+            width: type === "poli" ? 54 : 26, // LOS COCHES DE POLICÍA TIENEN TAMAÑO REAL Y PROPORCIONAL
+            height: type === "poli" ? 32 : 26,
+            speed: type === "poli" ? 6.5 : 2.0,
+            type: type, vx: -1 + Math.random() * 2, vy: -1 + Math.random() * 2
+        });
+    }
+
+    function handleInteraction() {
+        if (!player.currentVehicle) {
+            if (player.insideHouseId !== -1) {
+                let h = worldHouses[player.insideHouseId];
+                player.x = h.doorX + h.doorW / 2 - 12;
+                player.y = h.doorY + 25;
+                player.insideHouseId = -1;
+                triggerSeamlessAlert("Saliste al exterior.");
+                return;
+            } else {
+                for (let i = 0; i < worldHouses.length; i++) {
+                    let h = worldHouses[i];
+                    if (player.x + player.width >= h.doorX && player.x <= h.doorX + h.doorW &&
+                        player.y + player.height >= h.doorY - 10 && player.y <= h.doorY + 25) {
+                        player.insideHouseId = i;
+                        player.x = h.x + h.w / 2 - 12;
+                        player.y = h.y + h.h - 35;
+                        triggerSeamlessAlert(`Entraste a: ${h.name}`);
+                        return;
+                    }
+                }
+            }
+        }
+
+        if (player.currentVehicle) {
+            let car = player.currentVehicle;
+            car.isDriven = false;
+            player.x = car.x - 30; player.y = car.y;
+            player.currentVehicle = null;
+            player.width = 24; player.height = 24; player.speed = 5.0;
+        } else {
+            let nearest = null; let minDist = 70;
+            vehicles.forEach(v => {
+                let d = Math.sqrt(Math.pow((player.x) - v.x, 2) + Math.pow((player.y) - v.y, 2));
+                if (d < minDist) { nearest = v; minDist = d; }
+            });
+            if (nearest) {
+                player.currentVehicle = nearest; nearest.isDriven = true;
+                player.width = nearest.w; player.height = nearest.h;
+                player.speed = nearest.maxSpeed; player.x = nearest.x; player.y = nearest.y;
+            }
+        }
+    }
+
+    function triggerSeamlessAlert(text) {
+        alertBannerText = text; alertBannerTimer = 130;
+    }
+
+    function gameLoop() {
+        if (gameState === 'intro') renderIntro();
+        else if (gameState === 'playing') updateAndRenderGameplay();
+    }
+
+    function renderIntro() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        if (introFrame > 65 && introFrame < 140) ctx.translate(-4 + Math.random() * 8, -4 + Math.random() * 8);
+
+        ctx.fillStyle = "#000"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#fff";
+        for(let i=0; i<30; i++) ctx.fillRect((i * 89) % canvas.width, (i * 53) % canvas.height, 2, 2);
+
+        // ESTRELLA DE LA MUERTE / ORBITAL CANNON ORIGINAL EXACTO
+        let wx = 140, wy = 160;
+        ctx.fillStyle = "#444"; ctx.beginPath(); ctx.arc(wx, wy, 55, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(wx + 15, wy - 15, 15, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#fff"; ctx.font = "bold 20px Arial"; ctx.fillText("W", wx - 9, wy + 7);
+
+        let t1Y = 170, t2Y = 170;
+        if (introFrame > 105) { t1Y += (introFrame - 105) * 4.2; t2Y += (introFrame - 105) * 4.6; }
+
+        ctx.fillStyle = "#8ba0b0"; 
+        if (t1Y < canvas.height) {
+            ctx.fillRect(510, t1Y, 42, canvas.height - t1Y);
+            ctx.fillStyle = "#556677";
+            for (let wyy = t1Y + 10; wyy < canvas.height; wyy += 18) {
+                ctx.fillRect(515, wyy, 6, 6); ctx.fillRect(525, wyy, 6, 6); ctx.fillRect(535, wyy, 6, 6);
+            }
+        }
+
+        ctx.fillStyle = "#697d8c"; 
+        if (t2Y < canvas.height) {
+            ctx.fillRect(590, t2Y, 42, canvas.height - t2Y);
+            ctx.fillStyle = "#445566";
+            for (let wyy = t2Y + 10; wyy < canvas.height; wyy += 18) {
+                ctx.fillRect(595, wyy, 6, 6); ctx.fillRect(605, wyy, 6, 6); ctx.fillRect(615, wyy, 6, 6);
+            }
+        }
+
+        if (introFrame > 35 && introFrame < 107) {
+            ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 14;
+            ctx.beginPath(); ctx.moveTo(wx + 15, wy - 15); ctx.lineTo(530, 210); ctx.lineTo(610, 210); ctx.stroke();
+            ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 6; ctx.stroke();
+        }
+
+        if (introFrame >= 65 && introFrame < 160 && Math.random() < 0.4) {
+            introParticles.push({
+                x: 500 + Math.random() * 140,
+                y: 190 + Math.random() * 40 + (introFrame > 105 ? (introFrame - 105)*4 : 0),
+                r: 15 + Math.random() * 25, alpha: 1.0,
+                color: Math.random() < 0.4 ? "rgba(255, 68, 0, " : "rgba(110, 110, 110, "
+            });
+        }
+
+        introParticles.forEach((p, pIdx) => {
+            ctx.fillStyle = p.color + p.alpha + ")";
+            ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
+            p.r += 0.4; p.alpha -= 0.015;
+            if (p.alpha <= 0) introParticles.splice(pIdx, 1);
+        });
+        ctx.restore();
+
+        ctx.fillStyle = "#fff"; ctx.font = "14px 'Courier New'"; ctx.textAlign = "center";
+        if (introFrame < 65) ctx.fillText("CONECTANDO: Cañón Orbital Wikiestrella...", canvas.width/2, 420);
+        else if (introFrame < 115) { ctx.fillStyle = "#ff0055"; ctx.fillText("💥 IMPACTO INCENDIARIO DIRECTO: El antiguo orden colapsa por completo.", canvas.width/2, 420); }
+        else { ctx.fillStyle = "#00ffff"; ctx.fillText("Generando geografía orgánica... ¡Carga de Tuvalu lista!", canvas.width/2, 420); }
+
+        introFrame++;
+        if (introFrame > 200) { gameState = 'playing'; initializeMissionData(0); }
+    }
+
+    function updateAndRenderGameplay() {
+        const m = campaignMissions[currentMissionIdx];
+
+        let prevX = player.x; let prevY = player.y;
+        let moveX = 0; let moveY = 0;
+
+        if (keys["ArrowUp"] || keys["w"] || keys["W"]) moveY -= player.speed;
+        if (keys["ArrowDown"] || keys["s"] || keys["S"]) moveY += player.speed;
+        if (keys["ArrowLeft"] || keys["a"] || keys["A"]) moveX -= player.speed;
+        if (keys["ArrowRight"] || keys["d"] || keys["D"]) moveX += player.speed;
+
+        player.x += moveX; if (checkWallCollisions(player)) player.x = prevX;
+        player.y += moveY; if (checkWallCollisions(player)) player.y = prevY;
+
+        if (player.currentVehicle) {
+            player.currentVehicle.x = player.x; player.currentVehicle.y = player.y;
+        }
+
+        camera.x = Math.max(0, Math.min(WORLD_WIDTH - canvas.width, player.x - canvas.width / 2));
+        camera.y = Math.max(0, Math.min(WORLD_HEIGHT - canvas.height, player.y - canvas.height / 2));
+
+        if (keys[" "] && player.cooldown <= 0) {
+            let nearestHostile = null; let minDist = Infinity;
+            entities.forEach(e => { if (e.type !== "gente_comun") { let d=Math.sqrt(Math.pow(e.x-player.x,2)+Math.pow(e.y-player.y,2)); if(d<minDist){minDist=d; nearestHostile=e;}}});
+            let attackAngle = nearestHostile ? Math.atan2(nearestHostile.y - player.y, nearestHostile.x - player.x) : 0;
+            lasers.push({ x: player.x + player.width / 2, y: player.y + player.height / 2, vx: Math.cos(attackAngle) * 15, vy: Math.sin(attackAngle) * 15, size: 6 });
+            player.cooldown = 14;
+        }
+        if (player.cooldown > 0) player.cooldown--;
+
+        lasers.forEach((laser, lIdx) => {
+            laser.x += laser.vx; laser.y += laser.vy;
+            if (laser.x < 0 || laser.x > WORLD_WIDTH || laser.y < 0 || laser.y > WORLD_HEIGHT) lasers.splice(lIdx, 1);
+        });
+
+        entities.forEach((enemy, eIdx) => {
+            let dist = Math.sqrt(Math.pow(player.x - enemy.x, 2) + Math.pow(player.y - enemy.y, 2));
+            let isHostile = (enemy.type !== "gente_comun");
+
+            let exPrev = enemy.x; let eyPrev = enemy.y;
+            if (isHostile && dist < 500 && player.insideHouseId === -1) {
+                let rad = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                enemy.x += Math.cos(rad) * enemy.speed; enemy.y += Math.sin(rad) * enemy.speed;
+            } else {
+                enemy.x += enemy.vx * enemy.speed; enemy.y += enemy.vy * enemy.speed;
+                if (Math.random() < 0.02) { enemy.vx = -1 + Math.random() * 2; enemy.vy = -1 + Math.random() * 2; }
+            }
+
+            if (checkEnemyHouseBlock(enemy)) { enemy.x = exPrev; enemy.y = eyPrev; enemy.vx *= -1; enemy.vy *= -1; }
+
+            lasers.forEach((l, lIdx) => {
+                if (checkCollision({x:l.x,y:l.y,width:l.size,height:l.size}, enemy)) {
+                    lasers.splice(lIdx, 1); entities.splice(eIdx, 1); score += 50; hudScore.innerText = score; spawnEnemySeamless(enemy.type);
+                }
+            });
+
+            if (checkCollision(player, enemy) && isHostile) {
+                player.health -= 15; hudHealth.innerText = player.health + "%";
+                enemy.x += (enemy.x > player.x ? 100 : -100);
+                if (player.health <= 0) { triggerWastedScreen("HAS SIDO ELIMINADO", "La pasma te pilló."); return; }
+            }
+        });
+
+        goals.forEach((goal, gIdx) => {
+            if (checkCollision(player, goal)) {
+                if (m.targetType === "vandalizar_wiki" && player.insideHouseId !== landmarks.casaWikipediaId) return;
+                if (m.targetType === "miguel" && player.insideHouseId !== landmarks.mansionFincaId) return; // Forzar a entrar a buscarlo
+
+                goals.splice(gIdx, 1); player.collected++; score += 200; hudScore.innerText = score;
+                hudProgress.innerText = `${player.collected}/${m.targetGoal}`;
+
+                if (player.collected >= m.targetGoal) advanceMissionSeamless();
+                else if (m.targetType !== "vandalizar_wiki") spawnNextTargetSeamless(m.targetType);
+            }
+        });
+
+        // RENDERIZADO DEL ENTORNO MUNDIAL
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save(); ctx.translate(-camera.x, -camera.y);
+
+        // Dibujado de la Isla Orgánica (No cuadrada)
+        ctx.fillStyle = "#F4EBD0"; 
+        ctx.beginPath();
+        ctx.moveTo(islandCoastline[0].x, islandCoastline[0].y);
+        for(let i=1; i<islandCoastline.length; i++) ctx.lineTo(islandCoastline[i].x, islandCoastline[i].y);
+        ctx.closePath(); ctx.fill(); ctx.strokeStyle = "#E7D6A8"; ctx.lineWidth = 6; ctx.stroke();
+
+        // CONSTRUCCIÓN DEL PUERTO DE CARGA EN EL SURESTE
+        ctx.fillStyle = "#708090";
+        ctx.fillRect(landmarks.puertoCargaX, landmarks.puertoCargaY, 350, 140); // Muelle principal
+        ctx.fillRect(landmarks.puertoCargaX + 100, landmarks.puertoCargaY + 140, 60, 90); // Brazo extra de atraque
+        ctx.fillStyle = "#333"; ctx.font = "bold 11px monospace";
+        ctx.fillText("PUERTO COMERCIAL", landmarks.puertoCargaX + 20, landmarks.puertoCargaY + 30);
+
+        // Contenedores del puerto de carga
+        ctx.fillStyle = "#cc2222"; ctx.fillRect(landmarks.puertoCargaX + 50, landmarks.puertoCargaY + 60, 40, 22);
+        ctx.fillStyle = "#2222cc"; ctx.fillRect(landmarks.puertoCargaX + 110, landmarks.puertoCargaY + 60, 40, 22);
+
+        // Dibujado de edificios y recintos
+        worldHouses.forEach(h => {
+            if (player.insideHouseId === h.id) {
+                ctx.fillStyle = h.isGuyHQ ? "#112233" : "#22252a"; ctx.fillRect(h.x, h.y, h.w, h.h);
+                
+                // Si estamos dentro de la casa de Cervantes, lo dibujamos físicamente esperándote
+                if (h.id === landmarks.mansionFincaId) {
+                    ctx.fillStyle = "#fff"; ctx.font = "bold 11px sans-serif";
+                    ctx.fillText("✒️ Miguel de Cervantes", h.x + h.w/2 - 50, h.y + 110);
+                }
+            } else {
+                ctx.fillStyle = h.color; ctx.fillRect(h.x, h.y, h.w, h.h);
+                if (h.isGuyHQ) {
+                    ctx.fillStyle = "#1a252f"; ctx.fillRect(h.x + 15, h.y + 15, h.w - 30, h.h - 50); 
+                    ctx.fillStyle = "#00ffff";
+                    for(let wx = h.x + 30; wx < h.x + h.w - 40; wx += 50) { ctx.fillRect(wx, h.y + 35, 25, 35); ctx.fillRect(wx, h.y + 95, 25, 35); }
+                    ctx.fillStyle = "#ff0055"; ctx.fillRect(h.x + 20, h.y + 160, h.w - 40, 24);
+                    ctx.fillStyle = "#fff"; ctx.font = "bold 11px monospace"; ctx.textAlign = "center";
+                    ctx.fillText("GUY.JPG HEADQUARTERS", h.x + h.w/2, h.y + 176); ctx.textAlign = "left";
+                } else {
+                    ctx.fillStyle = "#8B4513"; ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(h.x + h.w/2, h.y + h.h/3); ctx.lineTo(h.x + h.w, h.y); ctx.fill();
+                    ctx.fillStyle = "#000"; ctx.font = "bold 10px monospace"; ctx.fillText(h.name, h.x + 10, h.y - 6);
+                }
+            }
+            ctx.strokeStyle = h.isGuyHQ ? "#00ffff" : "#ff0055"; ctx.lineWidth = 4; ctx.strokeRect(h.x, h.y, h.w, h.h);
+            ctx.fillStyle = "#ff0055"; ctx.fillRect(h.doorX, h.doorY, h.doorW, 6);
+        });
+
+        vehicles.forEach(v => {
+            if (!v.isDriven) {
+                ctx.fillStyle = v.color; ctx.fillRect(v.x, v.y, v.w, v.h);
+                ctx.fillStyle = "#111"; ctx.fillRect(v.x + 6, v.y - 3, 10, 3); ctx.fillRect(v.x + v.w - 16, v.y - 3, 10, 3);
+                ctx.fillRect(v.x + 6, v.y + v.h, 10, 3); ctx.fillRect(v.x + v.w - 16, v.y + v.h, 10, 3);
+            }
+        });
+
+        goals.forEach(g => {
+            ctx.fillStyle = "#ff0055"; ctx.fillRect(g.x, g.y, g.width, g.height);
+            ctx.fillStyle = "#fff"; ctx.font = "bold 9px monospace"; ctx.fillText(g.type, g.x, g.y - 4);
+        });
+
+        lasers.forEach(l => { ctx.fillStyle = "#00ffff"; ctx.fillRect(l.x, l.y, l.size, l.size); });
+
+        entities.forEach(enemy => {
+            if (enemy.type === "poli") {
+                // RENDER DE COCHES DE POLICÍA TAMAÑO COMPLETO / REALISTA
+                ctx.fillStyle = "#000000"; ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                ctx.fillStyle = "#ffffff"; ctx.fillRect(enemy.x + 12, enemy.y + 2, enemy.width - 24, enemy.height - 4);
+                ctx.fillStyle = "#0022cc"; ctx.fillRect(enemy.x + 20, enemy.y + 2, enemy.width - 40, enemy.height - 4);
+                let flash = Math.floor(Date.now() / 90) % 2 === 0;
+                ctx.fillStyle = flash ? "#ff0000" : "#0055ff"; ctx.fillRect(enemy.x + enemy.width/2 - 4, enemy.y + 4, 8, enemy.height - 8);
+            } else {
+                ctx.fillStyle = "#111"; ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+            }
+        });
+
+        // Jugador
+        if (player.currentVehicle) {
+            ctx.fillStyle = player.currentVehicle.color; ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.fillStyle = "#000"; ctx.fillRect(player.x + 12, player.y + 4, 12, player.height - 8);
+        } else {
+            ctx.fillStyle = "#00f0ff"; ctx.fillRect(player.x, player.y, player.width, player.height);
+        }
+        ctx.restore();
+
+        if (alertBannerTimer > 0) {
+            ctx.fillStyle = "rgba(255, 0, 85, 0.95)"; ctx.fillRect(0, 175, canvas.width, 38);
+            ctx.fillStyle = "#fff"; ctx.font = "bold 13px monospace"; ctx.textAlign = "center";
+            ctx.fillText(alertBannerText, canvas.width / 2, 198); alertBannerTimer--;
+        }
+
+        // HUD SUPERIOR
+        ctx.fillStyle = "rgba(4, 1, 6, 0.94)"; ctx.strokeStyle = "#ff0055"; ctx.lineWidth = 2;
+        ctx.fillRect(15, 15, 460, 80); ctx.strokeRect(15, 15, 460, 80);
+        ctx.fillStyle = "#00ffff"; ctx.font = "bold 11px monospace"; ctx.fillText(`OBJETIVO: ${m.title.toUpperCase()}`, 25, 35);
+        ctx.fillStyle = "#fff"; ctx.font = "12px Arial"; ctx.fillText(m.objective, 25, 55);
+
+        // 🗺️ MINIMAPA MEJORADO: RENDERIZA LA COSTA DE LA ISLA Y LOS EDIFICIOS EN REAL-TIME
+        let rx = 20, ry = canvas.height - 140, rw = 120, rh = 120;
+        ctx.fillStyle = "rgba(0, 15, 30, 0.9)"; ctx.fillRect(rx, ry, rw, rh);
+        ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 2; ctx.strokeRect(rx, ry, rw, rh);
+
+        // Silueta costera en el radar
+        ctx.strokeStyle = "rgba(0, 255, 255, 0.25)"; ctx.lineWidth = 1; ctx.beginPath();
+        ctx.moveTo(rx + (islandCoastline[0].x / WORLD_WIDTH) * rw, ry + (islandCoastline[0].y / WORLD_HEIGHT) * rh);
+        for(let i=1; i<islandCoastline.length; i++) ctx.lineTo(rx + (islandCoastline[i].x / WORLD_WIDTH) * rw, ry + (islandCoastline[i].y / WORLD_HEIGHT) * rh);
+        ctx.closePath(); ctx.stroke();
+
+        // EDIFICIOS MAPEADOS EN EL MINIMAPA
+        worldHouses.forEach(h => {
+            let hbx = rx + (h.x / WORLD_WIDTH) * rw;
+            let hby = ry + (h.y / WORLD_HEIGHT) * rh;
+            let hbw = (h.w / WORLD_WIDTH) * rw;
+            let hbh = (h.h / WORLD_HEIGHT) * rh;
+            ctx.fillStyle = h.isGuyHQ ? "#ff0055" : "rgba(255, 255, 255, 0.45)";
+            ctx.fillRect(hbx, hby, Math.max(2, hbw), Math.max(2, hbh));
+        });
+
+        // Puerto en el minimapa
+        ctx.fillStyle = "#708090";
+        ctx.fillRect(rx + (landmarks.puertoCargaX/WORLD_WIDTH)*rw, ry + (landmarks.puertoCargaY/WORLD_HEIGHT)*rh, (350/WORLD_WIDTH)*rw, (140/WORLD_HEIGHT)*rh);
+
+        // Posición del jugador y objetivos
+        let prx = rx + (player.x / WORLD_WIDTH) * rw;
+        let pry = ry + (player.y / WORLD_HEIGHT) * rh;
+        ctx.fillStyle = "#00ffff"; ctx.beginPath(); ctx.arc(prx, pry, 3.5, 0, Math.PI*2); ctx.fill();
+
+        if (goals.length > 0) {
+            ctx.fillStyle = (Math.floor(Date.now() / 180) % 2 === 0) ? "#ff0055" : "#fff";
+            ctx.beginPath(); ctx.arc(rx + (goals[0].x / WORLD_WIDTH) * rw, ry + (goals[0].y / WORLD_HEIGHT) * rh, 4.5, 0, Math.PI*2); ctx.fill();
+        }
+    }
+
+    function checkWallCollisions(rect) {
+        if (player.insideHouseId !== -1) return false;
+        for (let i = 0; i < solidWalls.length; i++) {
+            let w = solidWalls[i];
+            if (rect.x < w.x + w.w && rect.x + rect.width > w.x && rect.y < w.y + w.h && rect.y + rect.height > w.y) return true;
+        }
+        return false;
+    }
+
+    function checkEnemyHouseBlock(enemy) {
+        for (let i = 0; i < worldHouses.length; i++) {
+            let h = worldHouses[i];
+            if (enemy.x < h.x + h.w && enemy.x + enemy.width > h.x && enemy.y < h.y + h.h && enemy.y + enemy.height > h.y) return true;
+        }
+        return false;
+    }
+
+    function checkCollision(r1, r2) {
+        return r1.x < r2.x + r2.width && r1.x + r1.width > r2.x && r1.y < r2.y + r2.height && r1.y + r1.height > r2.y;
+    }
+
+    function advanceMissionSeamless() {
+        let nextIdx = currentMissionIdx + 1;
+        if (nextIdx < campaignMissions.length) {
+            initializeMissionData(nextIdx);
+        } else {
+            gameState = 'menu'; overlay.classList.remove("hidden");
+            document.getElementById("overlay-title").innerText = "¡HISTORIA COMPLETADA CON ÉXITO!";
+            document.getElementById("overlay-btn").innerText = "REINICIAR";
+            document.getElementById("overlay-btn").onclick = () => startIntroCinematic();
+        }
+    }
+
+    function triggerWastedScreen(title, msg) {
+        gameState = 'menu'; if (player.currentVehicle) { player.currentVehicle.isDriven = false; player.currentVehicle = null; }
+        clearInterval(gameInterval); overlay.classList.remove("hidden");
+        document.getElementById("overlay-title").innerText = title;
+        document.getElementById("overlay-btn").innerText = "REINTENTAR COMPROBACIÓN";
+        document.getElementById("overlay-btn").onclick = () => {
+            overlay.classList.add("hidden"); gameState = 'playing'; initializeMissionData(currentMissionIdx);
+            clearInterval(gameInterval); gameInterval = setInterval(gameLoop, 1000 / 60);
+        };
+    }
+</script>
+</body>
+</html>
