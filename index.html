@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Grand Theft Auto: Tio1.jpg Stories</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            background-color: #0c0813;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            border: 4px solid #ff0055;
+            box-shadow: 0 0 20px #ff0055;
+            background: #000;
+        }
+        canvas {
+            display: block;
+            background: #151124;
+        }
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 5, 18, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 40px;
+            z-index: 10;
+        }
+        #overlay.hidden {
+            display: none;
+        }
+        h1 {
+            color: #00ffff;
+            font-size: 32px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #00ffff;
+        }
+        p {
+            font-size: 14px;
+            line-height: 1.6;
+            max-width: 600px;
+            color: #ccc;
+            margin-bottom: 30px;
+        }
+        button {
+            background: #ff0055;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            font-family: monospace;
+            cursor: pointer;
+            border-radius: 4px;
+            box-shadow: 0 0 10px #ff0055;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: #00ffff;
+            color: #000;
+            box-shadow: 0 0 15px #00ffff;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <div id="overlay">
+        <h1 id="overlay-title">GRAND THEFT AUTO<br>TIO1.JPG STORIES</h1>
+        <p id="overlay-desc">
+            El apartado gráfico extremo ha sido optimizado para evitar explosiones nucleares en tu CPU. 
+            Sobrevive al naufragio en Tuvalu Ulterior, asóciate con Guy2.jpg, trafica Vicodin con el Dr. House 
+            y despierta el poder destructivo de Chuck Norris.
+        </p>
+        <button id="overlay-btn" onclick="startIntroCinematic()">INICIAR OPERACIÓN CRIMINAL</button>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const overlay = document.getElementById("overlay");
+
+    // Dimensiones del Mundo Virtual Excesivo de Tuvalu
+    const WORLD_WIDTH = 3000;
+    const WORLD_HEIGHT = 3000;
+
+    // Estados del Juego
+    let gameState = 'menu'; // 'menu', 'cinematic', 'playing'
+    let gameInterval = null;
+    let cinematicTimer = 0;
+
+    // Entidades del Juego
+    let player = {
+        x: 300, y: 400, width: 26, height: 26,
+        speed: 4, currentVehicle: null, insideHouseId: -1
+    };
+
+    let enemies = [];
+    let vehicles = [];
+    let worldHouses = [];
+    let solidWalls = [];
+    let goals = [];
+
+    // Hitos geográficos de Ukelele y Bikini
+    let landmarks = {
+        casaWikipediaId: 0,
+        cuartelGeneralId: 1,
+        mansionFinca: { x: 1200, y: 1500 },
+        itGates: { x: 2000, y: 500 },
+        puertoCarga: { x: 500, y: 2500 }
+    };
+
+    // Banderas de alertas de la interfaz
+    let alertBannerTimer = 0;
+    let alertBannerText = "";
+
+    // Teclado
+    let keys = {};
+
+    // Campaña Completa basada en la Inciclopedia
+    const campaignMissions = [
+        { title: "Without a Face", objective: "Vandaliza los servidores Wiki y huye al Cuartel General.", targetType: "vandalizar_wiki" },
+        { title: "Sense of Humour", objective: "Patrulla la zona y recluta a Motumbo para la Inciclopedia.", targetType: "goals" },
+        { title: "Lovely", objective: "Lleva la limusina hasta la guarida oculta de Bob Esponja.", targetType: "goals" },
+        { title: "Writer on Edge", objective: "Rescata a Miguel de Cervantes de los matones anticlichés.", targetType: "miguel" },
+        { title: "Diagnosis", objective: "Señala la mansión del Dr. House para conseguir dosis de Vicodin.", targetType: "cuddy" },
+        { title: "No Taxes on Vicodin", objective: "Asalta el puerto de carga confiscado por La Innombrable.", targetType: "vicodin" },
+        { title: "Chasing Chase Around", objective: "Localiza a Chase y destruye su helicóptero de escape.", targetType: "goals" },
+        { title: "Enemy at the Gates", objective: "Infíltrate en la tienda informática de Billy el Puertas.", targetType: "billy" },
+        { title: "Welcome Mr. Teddy", objective: "Secuestra la limusina de Ted y huye de la policía.", targetType: "goals" },
+        { title: "Only One Guy", objective: "Envenena los suministros del hotel de lujo de Guy1.jpg.", targetType: "goals" },
+        { title: "24 Seconds to Boom", objective: "¡Escapa del edificio antes de que la katana no baste!", targetType: "goals" },
+        { title: "Awakening of Mr. Norris", objective: "Suministra porros a Chuck Norris para desatar el apocalipsis.", targetType: "goals" }
+    ];
+    let currentMissionIdx = 0;
+
+    // Configurar Escucha de Teclados
+    window.addEventListener("keydown", e => { keys[e.key.toLowerCase()] = true; handleInteraction(e.key.toLowerCase()); });
+    window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+    // Inicializar Estructuras del Mapa Urbano
+    function generateWorld() {
+        worldHouses = [
+            { id: 0, x: 200, y: 200, w: 200, h: 150, doorX: 300, doorY: 360, color: "#443355" }, // Servidores Wiki
+            { id: 1, x: 800, y: 600, w: 250, h: 200, doorX: 925, doorY: 810, color: "#224433" }, // Cuartel Mafia
+            { id: 2, x: 1200, y: 1400, w: 300, h: 250, doorX: 1350, doorY: 1660, color: "#662222" } // Mansión House
+        ];
+        
+        solidWalls = [];
+        worldHouses.forEach(h => {
+            solidWalls.push({ x: h.x, w: h.w, y: h.y, h: h.h });
+        });
+
+        vehicles = [
+            { x: 450, y: 400, width: 50, height: 30, color: "#ffcc00", speed: 7, isDriven: false },
+            { x: 900, y: 850, width: 70, height: 35, color: "#00ffcc", speed: 9, isDriven: false }
+        ];
+
+        enemies = [
+            { x: 250, y: 360, width: 22, height: 22, type: "wiki", speed: 1 },
+            { x: 1000, y: 700, width: 24, height: 24, type: "poli", speed: 2 }
+        ];
+    }
+
+    function initializeMissionData(idx) {
+        currentMissionIdx = idx;
+        let m = campaignMissions[idx];
+        alertBannerText = `NUEVA MISIÓN: ${m.title}`;
+        alertBannerTimer = 180;
+        
+        goals = [];
+        if (m.targetType === "goals") {
+            goals.push({ x: 1500, y: 1000, width: 40, height: 40 });
+        }
+    }
+
+    // Interacciones del Entorno
+    function handleInteraction(key) {
+        if (key === 'e') {
+            if (player.insideHouseId !== -1) {
+                // Salir de estructura
+                let h = worldHouses[player.insideHouseId];
+                player.x = h.doorX;
+                player.y = h.doorY + 20;
+                player.insideHouseId = -1;
+                return;
+            }
+
+            // Entrar en estructuras residenciales
+            for (let h of worldHouses) {
+                let dist = Math.hypot((player.x + player.width/2) - h.doorX, (player.y + player.height/2) - h.doorY);
+                if (dist < 40) {
+                    player.insideHouseId = h.id;
+                    if (h.id === landmarks.casaWikipediaId && campaignMissions[currentMissionIdx].targetType === "vandalizar_wiki") {
+                        advanceMissionSeamless();
+                    }
+                    return;
+                }
+            }
+
+            // Gestión de vehículos automotores
+            if (player.currentVehicle) {
+                player.currentVehicle.isDriven = false;
+                player.y += 40;
+                player.currentVehicle = null;
+            } else {
+                for (let v of vehicles) {
+                    let dist = Math.hypot(player.x - v.x, player.y - v.y);
+                    if (dist < 50 && !v.isDriven) {
+                        v.isDriven = true;
+                        player.currentVehicle = v;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // --- ESCENA CINEMÁTICA DE INTRODUCCIÓN (WIKI-ESTRELLA DE LA MUERTE) ---
+    function startIntroCinematic() {
+        gameState = 'cinematic';
+        overlay.classList.add("hidden");
+        cinematicTimer = 0;
+        generateWorld();
+        initializeMissionData(0);
+        
+        if (gameInterval) clearInterval(gameInterval);
+        gameInterval = setInterval(introLoop, 1000 / 60);
+    }
+
+    function introLoop() {
+        cinematicTimer++;
+        
+        // Fondo espacial / apocalíptico
+        ctx.fillStyle = "#030107";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Estrellas de fondo
+        ctx.fillStyle = "#ffffff";
+        for (let i = 0; i < 30; i++) {
+            let sx = (Math.sin(i * 99) * 0.5 + 0.5) * canvas.width;
+            let sy = (Math.cos(i * 45) * 0.5 + 0.5) * canvas.height;
+            ctx.fillRect(sx, sy, 2, 2);
+        }
+
+        // Renderizar las Torres Gemelas del Lore
+        ctx.fillStyle = "#555566";
+        ctx.fillRect(180, 250, 60, 350);
+        ctx.fillRect(280, 250, 60, 350);
+        
+        // Detalles de ventanas
+        ctx.fillStyle = "#ffffaa";
+        for(let y = 270; y < 580; y += 30) {
+            if (cinematicTimer < 150 || Math.random() > 0.4) ctx.fillRect(195, y, 10, 10);
+            if (cinematicTimer < 150 || Math.random() > 0.4) ctx.fillRect(315, y, 10, 10);
+        }
+
+        // Renderizar la temible WIKIESTRELLA DE LA MUERTE
+        ctx.fillStyle = "#2c2c35";
+        ctx.strokeStyle = "#444455";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(600, 150, 80, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // El logo de la "W" en la Wikiestrella
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 40px serif";
+        ctx.fillText("W", 580, 165);
+
+        // Disparador del Rayo Láser Verde Destructor
+        if (cinematicTimer > 60 && cinematicTimer < 180) {
+            // Líneas de carga del rayo (Verde Neón)
+            ctx.strokeStyle = "#00ff00";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(550, 120); ctx.lineTo(600, 150);
+            ctx.moveTo(650, 100); ctx.lineTo(600, 150);
+            ctx.stroke();
+
+            // RAYO PRINCIPAL FULMINANTE VERDE
+            ctx.strokeStyle = "#00ff00";
+            ctx.lineWidth = 8 + Math.sin(cinematicTimer) * 4; // Flux dinámico
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = "#00ff00";
+            
+            ctx.beginPath();
+            ctx.moveTo(600, 150);
+            ctx.lineTo(260, 320);
+            ctx.stroke();
+            
+            // Reiniciar efectos de sombra para no ralentizar el motor de renderizado
+            ctx.shadowBlur = 0;
+
+            // Explosión localizada en el punto de contacto
+            ctx.fillStyle = cinematicTimer % 2 === 0 ? "#ffaa00" : "#ff3300";
+            ctx.beginPath();
+            ctx.arc(260, 320, 30 + Math.random() * 20, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Subtítulos de la cinemática
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
+        ctx.fillRect(0, 500, canvas.width, 100);
+        ctx.fillStyle = "#00ffff";
+        ctx.font = "14px monospace";
+        ctx.textAlign = "center";
+        
+        if (cinematicTimer < 90) {
+            ctx.fillText("AÑO 2006: La Wikiestrella de la Muerte se posiciona en órbita.", canvas.width / 2, 540);
+        } else if (cinematicTimer < 190) {
+            ctx.fillStyle = "#33ff33";
+            ctx.fillText("¡EL RAYO VANDÁLICO VERDE DE LA INNOMBRABLE DESTRUYE LAS ESTRUCTURAS!", canvas.width / 2, 540);
+        } else {
+            ctx.fillText("Huyes a Tuvalu Ulterior... Tu vuelo se estrella. Comienza la leyenda.", canvas.width / 2, 540);
+        }
+
+        if (cinematicTimer > 280) {
+            // Finalizar cinemática e iniciar gameplay real
+            gameState = 'playing';
+            clearInterval(gameInterval);
+            gameInterval = setInterval(gameLoop, 1000 / 60);
+        }
+    }
+
+    // --- BUCLE DE JUEGO PRINCIPAL (GAMEPLAY) ---
+    function gameLoop() {
+        updateLogic();
+        renderGraphics();
+    }
+
+    function updateLogic() {
+        if (player.insideHouseId !== -1) return; // Detener físicas del mundo si está hackeando dentro
+
+        let speed = player.currentVehicle ? player.currentVehicle.speed : player.speed;
+        let nextPos = { x: player.x, y: player.y, width: player.width, height: player.height };
+
+        // Procesar Entrada de Dirección de Movimiento
+        if (keys['w'] || keys['arrowup']) nextPos.y -= speed;
+        if (keys['s'] || keys['arrowdown']) nextPos.y += speed;
+        if (keys['a'] || keys['arrowleft']) nextPos.x -= speed;
+        if (keys['d'] || keys['arrowright']) nextPos.x += speed;
+
+        // Comprobación de Colisiones Perimetrales con Entorno
+        if (!checkWallCollisions(nextPos)) {
+            player.x = nextPos.x;
+            player.y = nextPos.y;
+        }
+
+        // Limitar los márgenes al mapa mundial de Tuvalu
+        if (player.x < 0) player.x = 0;
+        if (player.y < 0) player.y = 0;
+        if (player.x > WORLD_WIDTH - player.width) player.x = WORLD_WIDTH - player.width;
+        if (player.y > WORLD_HEIGHT - player.height) player.y = WORLD_HEIGHT - player.height;
+
+        // Sincronizar coordenadas del coche conducido
+        if (player.currentVehicle) {
+            player.currentVehicle.x = player.x;
+            player.currentVehicle.y = player.y;
+        }
+
+        // Verificar cumplimiento de objetivos en zona de metas
+        for (let i = goals.length - 1; i >= 0; i--) {
+            if (checkCollision(player, goals[i])) {
+                goals.splice(i, 1);
+                advanceMissionSeamless();
+            }
+        }
+    }
+
+    function renderGraphics() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        let m = campaignMissions[currentMissionIdx];
+
+        // Definición de Cámara Dinámica Cenital (Fijada en el Jugador)
+        let camX = player.x - canvas.width / 2;
+        let camY = player.y - canvas.height / 2;
+
+        if (camX < 0) camX = 0;
+        if (camY < 0) camY = 0;
+        if (camX > WORLD_WIDTH - canvas.width) camX = WORLD_WIDTH - canvas.width;
+        if (camY > WORLD_HEIGHT - canvas.height) camY = WORLD_HEIGHT - canvas.height;
+
+        ctx.save();
+        ctx.translate(-camX, -camY);
+
+        // Cuadrícula de Calles de Ukelele
+        ctx.strokeStyle = "#1d1933";
+        ctx.lineWidth = 1;
+        for (let x = 0; x < WORLD_WIDTH; x += 100) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, WORLD_HEIGHT); ctx.stroke();
+        }
+        for (let y = 0; y < WORLD_HEIGHT; y += 100) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(WORLD_WIDTH, y); ctx.stroke();
+        }
+
+        // Dibujar Casas / Infraestructuras
+        worldHouses.forEach(h => {
+            ctx.fillStyle = h.color;
+            ctx.fillRect(h.x, h.y, h.w, h.h);
+            ctx.strokeStyle = "#00ffff";
+            ctx.strokeRect(h.x, h.y, h.w, h.h);
+            
+            // Punto de Acceso (Puerta)
+            ctx.fillStyle = "#ff0055";
+            ctx.fillRect(h.doorX - 10, h.doorY - 5, 20, 10);
+        });
+
+        // Objetivos de la Misión en el Suelo
+        ctx.fillStyle = "rgba(0, 255, 255, 0.3)";
+        goals.forEach(g => {
+            ctx.fillRect(g.x, g.y, g.width, g.height);
+            ctx.strokeStyle = "#00ffff";
+            ctx.strokeRect(g.x, g.y, g.width, g.height);
+        });
+
+        // Dibujar Vehículos Aparcados
+        vehicles.forEach(v => {
+            if (!v.isDriven) {
+                ctx.fillStyle = v.color;
+                ctx.fillRect(v.x, v.y, v.width, v.height);
+                ctx.fillStyle = "#000";
+                ctx.fillRect(v.x + 5, v.y + 2, v.width - 10, v.height - 4);
+            }
+        });
+
+        // Renderizado de Enemigos (Código Integrado del Fragmento Original)
+        enemies.forEach(enemy => {
+            if (enemy.type === "wiki") {
+                ctx.fillStyle = "#ff0000";
+                ctx.fillRect(enemy.x + 3, enemy.y + 18, enemy.width - 6, 8); 
+            } else if (enemy.type === "poli") {
+                ctx.fillStyle = "#111111";
+                ctx.fillRect(enemy.x + 3, enemy.y - 3, 8, 3); ctx.fillRect(enemy.x + enemy.width - 11, enemy.y - 3, 8, 3);
+                ctx.fillRect(enemy.x + 3, enemy.y + enemy.height, 8, 3); ctx.fillRect(enemy.x + enemy.width - 11, enemy.y + enemy.height, 8, 3);
+                ctx.fillStyle = "#ffffff"; ctx.fillRect(enemy.x, enemy.y + 1, enemy.width, enemy.height - 2);
+                ctx.fillStyle = "#0044ff"; ctx.fillRect(enemy.x + 10, enemy.y + 1, enemy.width - 20, enemy.height - 2);
+                let toggleLight = Math.floor(Date.now() / 80) % 2 === 0;
+                ctx.fillStyle = toggleLight ? "#ff0033" : "#0055ff"; ctx.fillRect(enemy.x + 14, enemy.y + 3, 5, enemy.height - 6);
+            } else {
+                ctx.fillStyle = "#fbd2a6"; ctx.fillRect(enemy.x + 5, enemy.y, 16, 8);
+                ctx.fillStyle = "#1c1c1c"; ctx.fillRect(enemy.x, enemy.y + 8, enemy.width, 11);
+                ctx.fillStyle = "#111111"; ctx.fillRect(enemy.x + 3, enemy.y + 19, enemy.width - 6, 7);
+            }
+        });
+
+        // Renderizado del Jugador (Anonymous / Claude Speed)
+        if (player.currentVehicle) {
+            let v = player.currentVehicle;
+            ctx.fillStyle = v.color; ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.fillStyle = "#000"; ctx.fillRect(player.x + 10, player.y + 4, 12, player.height - 8);
+            ctx.fillRect(player.x + 35, player.y + 4, 10, player.height - 8);
+            ctx.fillStyle = "#ffff00"; ctx.fillRect(player.x + player.width - 4, player.y + 4, 4, 6);
+        } else {
+            ctx.fillStyle = "#00f0ff"; ctx.fillRect(player.x, player.y + 7, player.width, 11);
+            ctx.fillStyle = "#2d4b82"; ctx.fillRect(player.x + 2, player.y + 18, player.width - 4, 8);
+            ctx.fillStyle = "#fbd2a6"; ctx.fillRect(player.x + 5, player.y, 16, 8);
+        }
+
+        ctx.restore();
+
+        // Banner informativo emergente de la mafia
+        if (alertBannerTimer > 0) {
+            ctx.fillStyle = "rgba(255, 0, 85, 0.95)"; ctx.fillRect(0, 175, canvas.width, 38);
+            ctx.fillStyle = "#fff"; ctx.font = "bold 13px monospace"; ctx.textAlign = "center";
+            ctx.fillText(alertBannerText, canvas.width / 2, 198);
+            alertBannerTimer--;
+        }
+
+        // Panel HUD Superior de Información
+        ctx.fillStyle = "rgba(4, 1, 6, 0.94)"; ctx.strokeStyle = "#ff0055"; ctx.lineWidth = 2;
+        ctx.fillRect(15, 15, 460, 80); ctx.strokeRect(15, 15, 460, 80);
+        
+        ctx.fillStyle = "#00ffff"; ctx.font = "bold 11px monospace"; ctx.textAlign = "left";
+        ctx.fillText(`CÉLULA CRIMINAL: ${m.title.toUpperCase()}`, 25, 33);
+        
+        ctx.fillStyle = "#fff"; ctx.font = "12px Arial";
+        ctx.fillText(m.objective, 25, 53);
+        
+        ctx.fillStyle = "#aaa"; ctx.font = "10px monospace";
+        let drivingStatus = player.currentVehicle ? "CONDUCIENDO [E para bajar]" : "A PIE [E en la puerta para entrar / E en coches]";
+        if (player.insideHouseId !== -1) drivingStatus = "DENTRO DEL EDIFICIO RESIDENCIAL [Pulsa E para salir]";
+        ctx.fillText(`SITUACIÓN: ${drivingStatus}`, 25, 73);
+
+        // RADAR DE NAVEGACIÓN EN TIEMPO REAL CON FLUX DINÁMICO
+        let rx = 20, ry = canvas.height - 140, rw = 120, rh = 120;
+        ctx.fillStyle = "rgba(0, 0, 0, 0.85)"; ctx.fillRect(rx, ry, rw, rh);
+        ctx.strokeStyle = "#00ffff"; ctx.lineWidth = 2; ctx.strokeRect(rx, ry, rw, rh);
+
+        let prx = rx + (player.x / WORLD_WIDTH) * rw;
+        let pry = ry + (player.y / WORLD_HEIGHT) * rh;
+        ctx.fillStyle = "#00ffff"; ctx.beginPath(); ctx.arc(prx, pry, 3.5, 0, Math.PI*2); ctx.fill();
+
+        let targetRadarX = 0, targetRadarY = 0;
+        if (m.targetType === "vandalizar_wiki") {
+            let targetH = worldHouses[landmarks.casaWikipediaId];
+            targetRadarX = rx + ((targetH.doorX) / WORLD_WIDTH) * rw;
+            targetRadarY = ry + ((targetH.doorY) / WORLD_HEIGHT) * rh;
+        } else if (m.targetType === "llevar_cuartel") {
+            let targetH = worldHouses[landmarks.cuartelGeneralId];
+            targetRadarX = rx + ((targetH.doorX) / WORLD_WIDTH) * rw;
+            targetRadarY = ry + ((targetH.doorY) / WORLD_HEIGHT) * rh;
+        } else if (m.targetType === "miguel" || m.targetType === "cuddy") {
+             targetRadarX = rx + (landmarks.mansionFinca.x / WORLD_WIDTH) * rw;
+             targetRadarY = ry + (landmarks.mansionFinca.y / WORLD_HEIGHT) * rh;
+        } else if (m.targetType === "billy") {
+             targetRadarX = rx + (landmarks.itGates.x / WORLD_WIDTH) * rw;
+             targetRadarY = ry + (landmarks.itGates.y / WORLD_HEIGHT) * rh;
+        } else if (m.targetType === "vicodin") {
+             targetRadarX = rx + (landmarks.puertoCarga.x / WORLD_WIDTH) * rw;
+             targetRadarY = ry + (landmarks.puertoCarga.y / WORLD_HEIGHT) * rh;
+        } else if (goals.length > 0) {
+            targetRadarX = rx + (goals[0].x / WORLD_WIDTH) * rw;
+            targetRadarY = ry + (goals[0].y / WORLD_HEIGHT) * rh;
+        }
+
+        if (targetRadarX > 0) {
+            ctx.fillStyle = (Math.floor(Date.now() / 200) % 2 === 0) ? "#ff0055" : "#ffffff";
+            ctx.beginPath(); ctx.arc(targetRadarX, targetRadarY, 5, 0, Math.PI*2); ctx.fill();
+        }
+    }
+
+    // Funciones del Motor de Colisiones (Fragmento Original Garantizado)
+    function checkWallCollisions(rect) {
+        if (player.insideHouseId !== -1) return false;
+        
+        for (let i = 0; i < solidWalls.length; i++) {
+            let w = solidWalls[i];
+            if (rect.x < w.x + w.w && rect.x + rect.width > w.x &&
+                rect.y < w.y + w.h && rect.y + rect.height > w.y) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function checkEnemyHouseBlock(enemy) {
+        for (let i = 0; i < worldHouses.length; i++) {
+            let h = worldHouses[i];
+            if (enemy.x < h.x + h.w && enemy.x + enemy.width > h.x &&
+                enemy.y < h.y + h.h && enemy.y + enemy.height > h.y) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function checkCollision(r1, r2) {
+        return r1.x < r2.x + r2.width && r1.x + r1.width > r2.x &&
+               r1.y < r2.y + r2.height && r1.y + r1.height > r2.y;
+    }
+
+    function advanceMissionSeamless() {
+        let nextIdx = currentMissionIdx + 1;
+        if (nextIdx < campaignMissions.length) {
+            initializeMissionData(nextIdx);
+        } else {
+            gameState = 'menu';
+            overlay.classList.remove("hidden");
+            document.getElementById("overlay-title").innerText = "¡OPERACIÓN CRIMINAL COMPLETADA!";
+            document.getElementById("overlay-btn").innerText = "REPETIR HISTORIA DESDE LA INTRO";
+            document.getElementById("overlay-btn").onclick = () => startIntroCinematic();
+        }
+    }
+
+    function triggerWastedScreen(title, msg) {
+        gameState = 'menu';
+        if (player.currentVehicle) {
+            player.currentVehicle.isDriven = false;
+            player.currentVehicle = null;
+        }
+        clearInterval(gameInterval);
+        overlay.classList.remove("hidden");
+        document.getElementById("overlay-title").innerText = title;
+        document.getElementById("overlay-btn").innerText = "REINTENTAR DESDE EL ÚLTIMO CHECKPOINT";
+        document.getElementById("overlay-btn").onclick = () => {
+            overlay.classList.add("hidden");
+            gameState = 'playing';
+            initializeMissionData(currentMissionIdx);
+            clearInterval(gameInterval);
+            gameInterval = setInterval(gameLoop, 1000 / 60);
+        };
+    }
+</script>
+</body>
+</html>
